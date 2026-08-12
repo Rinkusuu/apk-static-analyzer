@@ -1,0 +1,71 @@
+{
+  "true_positive": 19,
+  "false_negative": 0,
+  "false_positive": 40,
+  "precision": 0.322,
+  "recall": 1.0,
+  "missed": [],
+  "false_positive_by_detector": {
+    "Heroku API Key": {
+      "count": 40,
+      "risk_weight": 60,
+      "risk_contributed": 2400
+    }
+  },
+  "false_positive_examples": [
+    {
+      "detector": "Heroku API Key",
+      "value": "0216c002-0638-1598-f700-8fa1511da8b3",
+      "risk_weight": 60
+    },
+    {
+      "detector": "Heroku API Key",
+      "value": "08773f4b-0c75-2a8e-158d-084873d1b894",
+      "risk_weight": 60
+    },
+    {
+      "detector": "Heroku API Key",
+      "value": "0ae38828-1d62-84c6-6cb7-a931ae67fdb5",
+      "risk_weight": 60
+    },
+    {
+      "detector": "Heroku API Key",
+      "value": "170b199d-6313-9c84-92be-03f935ef5366",
+      "risk_weight": 60
+    },
+    {
+      "detector": "Heroku API Key",
+      "value": "19f1d0a9-b6ff-8608-07b7-3977dfed2cff",
+      "risk_weight": 60
+    }
+  ],
+  "risk": {
+    "total_risk_score": 3750,
+    "risk_from_false_positives": 2400,
+    "false_positive_share": 0.64,
+    "per_artifact": [
+      {
+        "file": "AndroidManifest.xml",
+        "risk_level": "LOW",
+        "risk_score": 0
+      },
+      {
+        "file": "assets/index.android.bundle",
+        "risk_level": "CRITICAL",
+        "risk_score": 2930
+      },
+      {
+        "file": "classes.dex",
+        "risk_level": "CRITICAL",
+        "risk_score": 820
+      }
+    ]
+  },
+  "inventory": {
+    "urls": 3,
+    "websockets": 1,
+    "ip_addresses": 1,
+    "api_paths": 2,
+    "android_components": 5
+  }
+}

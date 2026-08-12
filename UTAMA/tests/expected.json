@@ -1,0 +1,329 @@
+{
+  "description": "Ground truth untuk sample.apk. must_detect=true berarti analyzer WAJIB menemukan nilai tersebut (jika tidak = false negative). must_detect=false berarti nilai tersebut adalah umpan dan TIDAK boleh dilaporkan sebagai kredensial (jika dilaporkan = false positive).",
+  "apk": "sample.apk",
+  "expected_risk_level": "HIGH",
+  "expected_risk_level_note": "Sampel memang memuat 13 kredensial palsu dan 2 connection string, sehingga level risiko tinggi adalah benar. Yang diuji bukan sekadar levelnya, melainkan apakah level itu berasal dari temuan nyata atau dari akumulasi false positive.",
+  "planted": [
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "AWS Access Key",
+      "value": "AKIAIOSFODNN7EXAMPLE",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Google API Key",
+      "value": "AIzaSyA01234567890123456789012345678901",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "GitHub Token",
+      "value": "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "GitLab Token",
+      "value": "glpat-abcdefghij0123456789",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Stripe Key",
+      "value": "sk_test_0123456789abcdefghij0123",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Slack Token",
+      "value": "xoxb-1234567890-ABCDEFGHIJ",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Telegram Bot Token",
+      "value": "123456789:AAabcdefghijklmnopqrstuvwxyz0123456",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Alibaba Cloud Key",
+      "value": "LTAI0123456789abcdefghij",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Twilio API Key",
+      "value": "SK0123456789abcdef0123456789abcdef",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "SendGrid API Key",
+      "value": "SG.abcdefghijklmnopqrstuv.abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "JWT Token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkRlbW8ifQ.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXkw",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Private Key Block",
+      "value": "-----BEGIN RSA PRIVATE KEY-----",
+      "must_detect": true
+    },
+    {
+      "category": "api_keys_and_tokens",
+      "detector": "Generic API Key",
+      "value": "s3cr3tV4lue_Ab12Cd34Ef56",
+      "must_detect": true
+    },
+    {
+      "category": "db_connections",
+      "detector": null,
+      "value": "mongodb://appuser:P4ssw0rd@db.internal.example.com:27017/prod",
+      "must_detect": true
+    },
+    {
+      "category": "db_connections",
+      "detector": null,
+      "value": "jdbc:mysql://db.internal.example.com:3306/prod",
+      "must_detect": true
+    },
+    {
+      "category": "urls",
+      "detector": null,
+      "value": "https://api.example-corp.com/v1/login",
+      "must_detect": true
+    },
+    {
+      "category": "urls",
+      "detector": null,
+      "value": "https://staging-api.example-corp.com/v2/payment",
+      "must_detect": true
+    },
+    {
+      "category": "websockets",
+      "detector": null,
+      "value": "wss://ws.example-corp.com/socket",
+      "must_detect": true
+    },
+    {
+      "category": "ip_addresses",
+      "detector": null,
+      "value": "203.0.113.45",
+      "must_detect": true
+    }
+  ],
+  "decoys": [
+    {
+      "value": "08773f4b-0c75-2a8e-158d-084873d1b894",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "29a41ba5-2088-17ff-4c13-eb00b08c4425",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "bf322509-516b-3ab8-80f3-810f1f2a0929",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "9ae3a670-22c2-df92-6b24-bdc32927bc26",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "e9785d3d-62bc-fd5f-7d03-fd69e77a3e24",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "d08390d6-3c44-8003-fb0f-c84b49726aa3",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "d3e1a8db-2a49-fd24-2929-0865108cb6c3",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "b375a358-47ee-4abc-1299-60169a0c4030",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "420e3d51-ba05-5309-785c-22a110ec6158",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "48eb8ad6-b02a-f155-c46f-726aa07d5613",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "a8133fd2-09a1-c0a2-6a8f-2336213ee5ca",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "6c175f8a-cbaf-06f0-931c-3c3fe944cad8",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "19f1d0a9-b6ff-8608-07b7-3977dfed2cff",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "0ae38828-1d62-84c6-6cb7-a931ae67fdb5",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "5bca78d5-f95c-315b-f5c3-3c321aea7922",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "c96cfea7-0f1b-40aa-26c2-af54f940db02",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "dd3b9af2-5b1b-5fd5-7cbb-460b48268cb6",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "5c04838b-5e3a-15f5-cea0-965b980c2f37",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "8c121f0b-4024-446b-f50b-6b6a31c2a5fd",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "7ea6c457-e6a7-ca96-d161-a60ac399c5d4",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "2fd0e162-3dfe-ea11-2ecb-ca519e3c7a93",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "9f0a6c1c-1c39-3ac0-1d92-a8c67f075e74",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "6a661060-2a8f-d76e-6e89-0b9c76416ab2",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "604e66c0-e21e-3466-4cd6-210c8529aab1",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "4e81e0bf-3843-203b-0b91-e57db3b28952",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "21c25247-c26a-b7c3-42cc-126f9eaf1669",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "3957393c-5048-57fe-2b9a-8a2c9529e663",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "8ffb0b22-32e7-5966-2952-6f780bda44bf",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "22099345-d4a4-e184-d27e-16027515e25e",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "4ce40757-3685-f614-752a-30009bcbc934",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "9fde5168-cddd-470f-79e6-7a7dea0ba0e6",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "0216c002-0638-1598-f700-8fa1511da8b3",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "170b199d-6313-9c84-92be-03f935ef5366",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "caecd1b5-75e3-cbe0-2834-185a72d55be7",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "6498b6f5-725f-b929-77ca-4b388f143b8b",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "b232166d-2f9d-d51f-c656-833716296330",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "d4b7bc33-6de7-5d0e-72a8-ba7a28fb2e07",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "66110034-c40f-82c0-0cd2-2dbcf06c8f44",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "b204e7d2-3b8d-669e-e3ae-23a75705c016",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "fa7238d3-7607-03f5-84f5-3289f6d88e74",
+      "reason": "UUID biasa (request-id), bukan kredensial",
+      "must_detect": false
+    },
+    {
+      "value": "aaaaaaaaaaaaaaaaaaaa",
+      "reason": "placeholder entropi rendah pada key 'api_key'",
+      "must_detect": false
+    }
+  ]
+}

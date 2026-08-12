@@ -1,0 +1,17 @@
+# Artefak Python
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+
+# ──────────────────────────────────────────────────────────────────────
+# JANGAN PERNAH DI-PUSH.
+# PENDUKUNG/ memuat hasil analisis APK produksi milik pihak ketiga:
+# host backend internal dan puluhan endpoint milik orang lain.
+# Berkas tersebut adalah bahan kerja lokal, bukan bagian dari proyek.
+# ──────────────────────────────────────────────────────────────────────
+PENDUKUNG/
+
+# Keluaran hasil analisis APK nyata (dibuat otomatis oleh apk_analyzer.py)
+*_analysis_*/
