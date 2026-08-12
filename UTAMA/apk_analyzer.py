@@ -23,7 +23,19 @@ def calculate_shannon_entropy(data: bytes) -> float:
 
 def extract_apk(apk_path: Path, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    output_root = output_dir.resolve()
     with zipfile.ZipFile(apk_path, "r") as apk:
+        # Defense-in-depth terhadap Zip Slip. zipfile.extractall() bawaan Python
+        # sudah menyanitasi "../", namun keamanan itu bergantung pada perilaku
+        # internalnya. Pemeriksaan eksplisit di bawah menjadikan jaminan itu
+        # tersurat: setiap entri harus jatuh di dalam output_dir; bila ada yang
+        # mengarah keluar, ekstraksi dibatalkan.
+        for member in apk.namelist():
+            target = (output_root / member).resolve()
+            if target != output_root and output_root not in target.parents:
+                raise ValueError(
+                    f"Entri APK mencoba menulis di luar direktori tujuan (Zip Slip): {member!r}"
+                )
         apk.extractall(output_dir)
 
 

@@ -408,11 +408,26 @@ Skor bertambah per kemunculan tanpa batas atas. Sebuah APK besar akan hampir
 selalu mencapai `CRITICAL` semata karena volumenya, sehingga ambang 200/100/50
 kehilangan daya beda.
 
-**9.3 Kerentanan Zip Slip pada ekstraksi.**
-`zipfile.extractall()` (baris 27) mengekstrak entri sesuai nama path di dalam
-arsip tanpa validasi. Arsip yang sengaja dibuat jahat dapat memuat entri bernama
-`../../` sehingga berkas tertulis di luar direktori tujuan. Ini merupakan
-kerentanan nyata pada perangkat yang justru ditujukan untuk keamanan.
+**9.3 Ketahanan terhadap Zip Slip — hipotesis yang diuji dan terbantah.**
+Zip Slip adalah kerentanan ketika entri arsip bernama `../../berkas` diekstrak
+tanpa pemeriksaan sehingga berkas tertulis di luar direktori tujuan. Karena
+`extract_apk()` memakai `zipfile.extractall()`, sempat diduga perangkat ini
+rentan. Dugaan tersebut diuji dengan APK jahat buatan sendiri
+(`tests/test_zip_slip.py`), dan hasilnya **membantah dugaan**: pustaka standar
+Python 3 sudah menetralkan Zip Slip pada dua vektor sekaligus —
+
+- entri `../../berkas` disanitasi menjadi `dest/berkas` (komponen `..` dibuang);
+- entri symlink yang menunjuk keluar ditulis sebagai berkas teks biasa, bukan
+  sebagai tautan, sehingga tidak dapat ditembus.
+
+Meski demikian, keamanan itu bergantung pada perilaku internal `extractall()`.
+Bila kelak metode ekstraksi diubah menjadi perulangan manual (misalnya untuk
+melewati berkas berukuran sangat besar satu per satu), perlindungan implisit itu
+dapat hilang tanpa disadari. Karena itu `extract_apk()` dilengkapi pemeriksaan
+jalur eksplisit sebagai *defense-in-depth* — bukan menambal kerentanan yang ada,
+melainkan menjadikan jaminan keamanan tersurat dan tahan terhadap perubahan kode.
+Uji `test_zip_slip.py` dipertahankan sebagai *regression test* yang menjaga agar
+jaminan itu tidak diam-diam hilang di kemudian hari.
 
 **9.4 AndroidManifest.xml tidak diurai secara benar.**
 Pada APK sungguhan, manifest disimpan dalam format binary XML (AXML) tanpa tanda

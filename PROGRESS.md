@@ -71,8 +71,19 @@ Versi awal perangkat sudah berjalan dan mampu menemukan banyak hal, namun:
       yang didahului label bermakna "heroku". Detektor tidak dihapus, dan
       kemampuannya dibuktikan tetap utuh lewat kunci Heroku berlabel yang
       sengaja ditanam pada sampel.
-- [ ] Perbaiki kerentanan Zip Slip pada `extract_apk()`
+- [x] **Zip Slip: hipotesis diuji, terbantah, lalu diperkuat.** Diduga
+      `extract_apk()` rentan Zip Slip. Diuji dengan APK jahat buatan sendiri
+      (`tests/test_zip_slip.py`) dan **terbantah** — `zipfile.extractall()` Python
+      sudah menetralkan `../` maupun symlink. Meski begitu, ditambahkan
+      pemeriksaan jalur eksplisit sebagai *defense-in-depth* agar APK jahat
+      **ditolak tegas**, bukan diam-diam disanitasi, dan agar keamanan tidak
+      bergantung pada detail internal `extractall()`. Uji dipertahankan sebagai
+      *regression test*.
 - [ ] Normalisasi skor risiko
+
+**Pelajaran metodologis dari langkah Zip Slip:** uji yang membantah hipotesis
+sama berharganya dengan yang membenarkan. Klaim keamanan diuji, bukan dipercaya
+begitu saja — dan dokumentasi bagian 9.3 yang semula keliru telah dikoreksi.
 
 ---
 
