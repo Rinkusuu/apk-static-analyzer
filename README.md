@@ -1,4 +1,17 @@
-# Proyek Akhir Kerja Praktik — APK Static Analyzer
+# APK Static Analyzer
+
+Perangkat analisis statis untuk berkas APK Android. Membuka APK, menelusuri
+artefak kode di dalamnya, lalu mendeteksi endpoint dan kredensial yang terekspos
+— tanpa dekompilasi dan tanpa menjalankan aplikasinya.
+
+Dikembangkan sebagai proyek akhir Kerja Praktik, bertolak dari prototipe yang
+ditinggalkan pengembang sebelumnya. Riwayat pengembangan dan angka pengukuran
+tercatat di `PROGRESS.md`.
+
+**Ketepatan saat ini:** precision 100%, recall 100% terhadap sampel
+ber-ground-truth berisi 20 kredensial dan 41 umpan.
+
+---
 
 Direktori ini dibagi menjadi dua bagian dengan aturan yang tegas:
 
@@ -26,7 +39,8 @@ UTAMA/
     ├── evaluate.py                 harness pengukuran precision & recall
     ├── sample.apk                  APK sintetis (dibangkitkan)
     ├── expected.json               ground truth (dibangkitkan)
-    └── baseline_report.json        hasil pengukuran (dibangkitkan)
+    ├── baseline_report.json        angka kondisi awal — dibekukan, jangan ditimpa
+    └── hasil_terkini.json          hasil pengukuran terakhir (dibangkitkan)
 ```
 
 Seluruh isinya aman dikumpulkan. Tidak ada data milik pihak lain, dan seluruh

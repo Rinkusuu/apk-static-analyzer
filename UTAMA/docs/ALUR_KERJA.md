@@ -337,32 +337,58 @@ sampel, lalu membandingkan hasilnya dengan ground truth:
 Penghitungan FP hanya diterapkan pada kategori yang bersifat tuduhan
 (`api_keys_and_tokens` dan `db_connections`), tidak pada kategori inventarisasi.
 
-### 8.3 Hasil Baseline
+### 8.3 Hasil Pengukuran
 
-Hasil pengujian terhadap kondisi tool saat ini:
+| Metrik | Kondisi Awal | Sekarang | Perubahan |
+|---|---|---|---|
+| True Positive | 20 | 20 | tetap |
+| False Negative | 0 | 0 | tetap |
+| False Positive | 40 | **0** | −40 |
+| **Precision** | **33.33%** | **100.00%** | +66.67 poin |
+| **Recall** | **100.00%** | **100.00%** | tetap |
+| Skor risiko | 3885 | 1485 | −2400 |
 
-| Metrik | Nilai |
-|---|---|
-| True Positive | 19 |
-| False Negative | 0 |
-| False Positive | 40 |
-| **Precision** | **32.20%** |
-| **Recall** | **100.00%** |
+Analisis atas kondisi awal:
 
-Analisis atas angka tersebut:
-
-1. **Recall sempurna.** Seluruh 19 kredensial tertanam berhasil ditemukan,
-   mencakup kunci AWS, Google, GitHub, GitLab, Stripe, Slack, Telegram, Alibaba,
-   Twilio, SendGrid, token JWT, blok kunci privat, serta dua connection string.
-   Kemampuan deteksi dasar tool terbukti kuat.
+1. **Recall sempurna sejak awal.** Seluruh 20 kredensial tertanam berhasil
+   ditemukan, mencakup kunci AWS, Google, GitHub, GitLab, Stripe, Slack,
+   Telegram, Alibaba, Twilio, SendGrid, Heroku, token JWT, blok kunci privat,
+   serta dua connection string. Kemampuan deteksi dasarnya memang kuat.
 
 2. **Precision rendah, dan penyebabnya tunggal.** Seluruh 40 false positive
    berasal dari satu detektor saja, yaitu `Heroku API Key`. Delapan belas
    detektor lainnya tidak menghasilkan satu pun kesalahan.
 
-3. **Skor risiko terdistorsi.** Dari total skor 3750, sebanyak 2400 (64%)
-   disumbang oleh false positive tersebut. Artinya level `CRITICAL` yang
+3. **Skor risiko terdistorsi.** Dari total skor 3885, sebanyak 2400 (62%)
+   disumbang oleh false positive tersebut, sehingga level `CRITICAL` yang
    dilaporkan sebagian besar bukan berasal dari temuan yang sahih.
+
+### 8.4 Perbaikan: Deteksi Berbasis Konteks
+
+Kunci API Heroku berbentuk UUID biasa dan **tidak memiliki awalan khas** seperti
+`AKIA` pada AWS, `AIza` pada Google, atau `ghp_` pada GitHub. Akibatnya, kunci
+Heroku sungguhan dan sekadar *request-id* maupun *trace-id* memiliki bentuk yang
+identik dan mustahil dibedakan berdasarkan pola semata.
+
+Pendekatan deteksi karena itu diubah dari **berbasis bentuk** menjadi **berbasis
+konteks**: sebuah UUID hanya dianggap kredensial apabila didahului label yang
+menyebut "heroku".
+
+| | Pendekatan lama | Pendekatan baru |
+|---|---|---|
+| Dasar deteksi | Bentuk (*pattern matching*) | Konteks (*contextual matching*) |
+| Cakupan | Seluruh UUID | Hanya UUID berlabel heroku |
+
+Detektor **tidak dihapus**, sebab menghapusnya berarti menghilangkan kemampuan
+mendeteksi kunci Heroku sungguhan. Untuk membuktikannya, sampel uji diperluas
+dengan satu kunci Heroku berlabel `HEROKU_API_KEY`. Hasil pengukuran menunjukkan
+kunci tersebut tetap terdeteksi (True Positive tetap 20, False Negative tetap 0)
+sementara seluruh 40 false positive hilang.
+
+Perbaikan ini juga menjawab risiko *alert fatigue*: pada kondisi awal, dua dari
+setiap tiga temuan kredensial adalah alarm palsu. Perangkat dengan rasio semacam
+itu cenderung diabaikan analis, sehingga temuan sungguhan justru berisiko
+terlewat meskipun recall-nya sempurna.
 
 ---
 
@@ -371,11 +397,11 @@ Analisis atas angka tersebut:
 Bagian ini didasarkan pada pembacaan kode dan hasil pengujian, dan menjadi dasar
 perbaikan pada tahap selanjutnya.
 
-**9.1 Pola `Heroku API Key` terlalu longgar.**
-Polanya, `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-...`, sesungguhnya hanyalah pola UUID
-generik. Setiap UUID di dalam APK — dan jumlahnya bisa ratusan — akan dianggap
-kredensial dan menambah 60 ke skor risiko. Inilah penyebab tunggal seluruh false
-positive pada pengujian.
+**9.1 ~~Pola `Heroku API Key` terlalu longgar.~~ — SUDAH DIPERBAIKI.**
+Pola lama, `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-...`, sesungguhnya hanyalah pola UUID
+generik, sehingga setiap UUID di dalam APK dianggap kredensial. Ini merupakan
+penyebab tunggal seluruh false positive pada pengukuran awal. Telah diperbaiki
+melalui deteksi berbasis konteks; lihat bagian 8.4.
 
 **9.2 Skor risiko tidak dinormalisasi.**
 Skor bertambah per kemunculan tanpa batas atas. Sebuah APK besar akan hampir

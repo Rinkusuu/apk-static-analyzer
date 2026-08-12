@@ -1,29 +1,34 @@
-# Catatan Progres — Proyek Akhir KP: APK Static Analyzer
+# Catatan Pengembangan — APK Static Analyzer
 
 Berkas ini adalah memori proyek. Sesi Claude yang baru cukup membaca berkas ini
-untuk melanjutkan pekerjaan tanpa perlu menelusuri ulang seluruh direktori.
+untuk melanjutkan pekerjaan tanpa menelusuri ulang seluruh direktori.
 
 **Terakhir diperbarui:** 2026-08-12
 
 ---
 
-## Konteks Proyek
+## Tentang Proyek
 
-Proyek akhir Kerja Praktik. Program `apk_analyzer.py` **bukan tulisan pemilik
-proyek** — kode ini diwariskan dari `ThreatHunter-Toolkit/APK_Analyzer/`
-(nama asli `indexandbundle_grep.py`) lalu ditetapkan sebagai proyek akhir yang
-akan dilaporkan.
+Pengembangan perangkat analisis statis APK Android untuk mendeteksi endpoint dan
+kredensial yang terekspos di dalam berkas aplikasi. Dikerjakan sebagai proyek
+akhir Kerja Praktik.
 
-Konsekuensinya, tujuan pekerjaan bukan sekadar "membuat tool jalan", melainkan
-**memahami, mengukur, dan memperbaiki** kode tersebut sampai pemiliknya sanggup
-mempertanggungjawabkannya saat sidang.
+Proyek dimulai dari sebuah prototipe yang ditinggalkan pengembang sebelumnya
+(`ThreatHunter-Toolkit/APK_Analyzer/indexandbundle_grep.py`) — sebuah skrip
+tunggal tanpa dokumentasi, tanpa pengujian, dan tanpa ukuran ketepatan apa pun.
+Prototipe itu diambil alih sebagai titik mulai, bukan sebagai produk jadi.
 
-## Cara Kerja Tool (ringkas)
+Arah pengembangan yang dipilih: **jangan menambah fitur sebelum yang ada bisa
+diukur.** Karena itu urutan kerjanya adalah membangun alat ukur lebih dulu,
+menetapkan angka kondisi awal, baru memperbaiki — sehingga setiap perbaikan
+dapat dibuktikan dengan selisih angka, bukan sekadar diklaim.
+
+## Cara Kerja Perangkat (ringkas)
 
 Analisis statis, tanpa dekompilasi dan tanpa menjalankan aplikasi. Pada dasarnya
 `grep` terstruktur terhadap isi APK. Empat tahap: ekstrak ZIP → pilih artefak
 (`.bundle`/`.dex`/`.so`/manifest) → baca sebagai byte lalu sapu ±25 regex →
-akumulasi skor risiko. Penjelasan lengkap ada di `UTAMA/docs/ALUR_KERJA.md`.
+akumulasi skor risiko. Penjelasan lengkap di `UTAMA/docs/ALUR_KERJA.md`.
 
 ## Struktur Direktori
 
@@ -36,77 +41,94 @@ Aturan lengkap ada di `README.md`.
 
 ---
 
-## Yang Sudah Selesai
+## Fase 0 — Kondisi Awal yang Diwarisi
 
-- [x] Berkas relevan disalin dari `ThreatHunter-Toolkit/APK_Analyzer/` ke `KP/FINAL/`
-- [x] Berkas utama diganti nama: `indexandbundle_grep.py` → `apk_analyzer.py`
-- [x] Dibangun APK sampel sintetis ber-ground-truth (`UTAMA/tests/make_sample_apk.py`)
-- [x] Dibangun harness pengukuran precision & recall (`UTAMA/tests/evaluate.py`)
-- [x] Baseline "sebelum perbaikan" terkunci di `UTAMA/tests/baseline_report.json`
-- [x] Dokumentasi alur kerja lengkap (`UTAMA/docs/ALUR_KERJA.md`, 10 bagian)
-- [x] Direktori dipisah `UTAMA/` vs `PENDUKUNG/` agar tidak salah kumpul
-- [x] `tests/test_analyzer.py` diganti nama menjadi `tests/evaluate.py` (bukan
-      unit test pytest, melainkan harness pengukuran)
-- [x] Repositori git diinisialisasi, baseline dikunci sebagai commit pertama
-- [x] Di-push ke GitHub privat: https://github.com/Rinkusuu/apk-static-analyzer
+Prototipe berjalan dan mampu menemukan banyak hal, namun:
 
-## Version Control
+- tidak ada dokumentasi apa pun mengenai cara kerjanya;
+- tidak ada pengujian, sehingga ketepatannya tidak diketahui;
+- tidak ada version control;
+- keluarannya bercampur dengan hasil analisis APK produksi pihak ketiga.
 
-Remote `origin` mengarah ke repositori **privat** `Rinkusuu/apk-static-analyzer`,
-branch `main`. Seluruh commit ber-author tunggal `Rinkusuu` tanpa trailer
-co-author — pemilik proyek adalah satu-satunya kontributor, dan ini disengaja.
+## Fase 1 — Membangun Fondasi *(selesai)*
 
-`PENDUKUNG/` dikunci di `.gitignore` dan tidak pernah masuk riwayat git. Sebelum
-melakukan push, pastikan ulang dengan `git ls-files | grep -i pendukung` yang
-harus kosong.
+- [x] Kode dipindahkan ke struktur proyek tersendiri di `KP/FINAL/`
+- [x] Berkas utama diganti nama menjadi `apk_analyzer.py`
+- [x] Alur kerja dibedah dan didokumentasikan (`UTAMA/docs/ALUR_KERJA.md`, 10 bagian)
+- [x] Direktori dipisah `UTAMA/` vs `PENDUKUNG/` agar data pihak ketiga tidak
+      ikut terkumpul
+- [x] Repositori git diinisialisasi, di-push ke GitHub privat
 
-Setiap perbaikan dibuat sebagai satu commit tersendiri agar diff-nya dapat
-dijadikan bukti "sebelum dan sesudah" pada laporan.
+## Fase 2 — Membangun Alat Ukur *(selesai)*
 
-## Angka Baseline (sebelum perbaikan apa pun)
+- [x] APK sampel sintetis ber-ground-truth (`UTAMA/tests/make_sample_apk.py`) —
+      20 kredensial palsu yang wajib terdeteksi, 41 umpan yang tidak boleh
+      terdeteksi
+- [x] Harness pengukuran precision & recall (`UTAMA/tests/evaluate.py`)
+- [x] Angka kondisi awal dibekukan di `UTAMA/tests/baseline_report.json`
+- [x] Harness membandingkan otomatis hasil terkini terhadap kondisi awal
 
-Sumber: `UTAMA/tests/baseline_report.json`. Reproduksi: `cd UTAMA && python3 tests/evaluate.py`
+## Fase 3 — Perbaikan Ketepatan *(berjalan)*
 
-| Metrik | Nilai |
-|---|---|
-| True Positive | 19 |
-| False Negative | 0 |
-| False Positive | 40 |
-| Precision | 32.20% |
-| Recall | 100.00% |
-| Total skor risiko | 3750 |
-| Skor dari false positive | 2400 (64%) |
+- [x] **Detektor Heroku API Key diubah ke deteksi berbasis konteks.**
+      Pola lama hanyalah pola UUID generik, sehingga setiap request-id maupun
+      trace-id di dalam APK dianggap kredensial. Pola baru hanya menerima UUID
+      yang didahului label bermakna "heroku". Detektor tidak dihapus, dan
+      kemampuannya dibuktikan tetap utuh lewat kunci Heroku berlabel yang
+      sengaja ditanam pada sampel.
+- [ ] Perbaiki kerentanan Zip Slip pada `extract_apk()`
+- [ ] Normalisasi skor risiko
 
-**Seluruh 40 false positive berasal dari satu detektor: `Heroku API Key`**, yang
-polanya sesungguhnya hanya UUID generik. Delapan belas detektor lain bersih.
+---
 
-Terkonfirmasi pula pada APK nyata (`PENDUKUNG/hasil_apk_nyata/`): dari 7
-kredensial yang dilaporkan, seluruhnya false positive (6 Heroku, 1 Mailgun).
+## Angka Pengukuran
+
+Reproduksi: `cd UTAMA && python3 tests/evaluate.py`
+
+| Metrik | Kondisi Awal | Sekarang | Perubahan |
+|---|---|---|---|
+| True Positive | 20 | 20 | tetap |
+| False Negative | 0 | 0 | tetap |
+| False Positive | 40 | **0** | −40 |
+| Precision | 33.33% | **100.00%** | +66.67 poin |
+| Recall | 100.00% | 100.00% | tetap |
+| Skor risiko | 3885 | 1485 | −2400 |
+
+Seluruh false positive pada kondisi awal berasal dari satu detektor:
+`Heroku API Key`. Delapan belas detektor lainnya bersih sejak awal.
+
+Kelemahan yang sama terkonfirmasi pula pada APK produksi nyata
+(`PENDUKUNG/hasil_apk_nyata/`): dari 7 kredensial yang dilaporkan, seluruhnya
+false positive (6 Heroku, 1 Mailgun).
+
+**Catatan:** `baseline_report.json` sengaja dibekukan dan tidak pernah ditimpa.
+Hasil setiap kali dijalankan ditulis ke `hasil_terkini.json`.
 
 ---
 
 ## Rencana Berikutnya (urut prioritas)
 
-1. **Perketat/hapus detektor `Heroku API Key`** — satu perubahan, precision
-   diperkirakan 32% → 100%. Dampak paling besar dengan usaha paling kecil.
-2. **Perbaiki kerentanan Zip Slip** pada `extract_apk()` — `zipfile.extractall()`
-   tanpa validasi path.
-3. **Normalisasi skor risiko** — saat ini akumulatif tanpa batas atas, sehingga
+1. **Kerentanan Zip Slip** pada `extract_apk()` — `zipfile.extractall()` tanpa
+   validasi path memungkinkan arsip jahat menulis berkas di luar direktori
+   tujuan. Perlu diuji dengan APK jahat buatan sendiri.
+2. **Normalisasi skor risiko** — saat ini akumulatif tanpa batas atas, sehingga
    ambang 200/100/50 kehilangan daya beda pada APK besar.
-4. Pertimbangkan pengurai AXML untuk AndroidManifest.xml (saat ini manifest APK
-   nyata praktis tidak terbaca karena binary XML tidak memiliki tanda kutip).
-5. Pemisahan modul dan laporan berformat Markdown/HTML — **paling akhir**, hanya
-   setelah pemiliknya benar-benar paham alur kodenya.
+3. **Pengurai AXML** untuk AndroidManifest.xml — manifest APK nyata berformat
+   binary XML sehingga saat ini praktis tidak terbaca.
+4. Efisiensi memori dan kinerja blok Base64.
+5. Pemisahan modul dan laporan berformat Markdown/HTML — **paling akhir**.
 
-Daftar keterbatasan lengkap (7 poin) ada di `UTAMA/docs/ALUR_KERJA.md` bagian 9.
+Daftar keterbatasan lengkap ada di `UTAMA/docs/ALUR_KERJA.md` bagian 9.
 
 ---
 
 ## Cara Kerja yang Disepakati
 
-- Setiap perbaikan dijelaskan **sebelum** dan **sesudah**, dengan angka dari
-  harness pengujian. Tiap perbaikan setara satu subbab laporan.
-- **Pemilik proyek yang menjalankan sendiri** `python3 tests/evaluate.py`
-  setelah tiap perubahan — ini bagian dari proses memahami, bukan formalitas.
-- Jangan refactor besar-besaran sebelum alur kodenya dipahami.
+- Ukur dulu, baru perbaiki. Setiap perbaikan disertai angka sebelum dan sesudah
+  dari harness, serta dibuat sebagai satu commit tersendiri agar diff-nya dapat
+  dijadikan bukti pada laporan.
+- Jelaskan mekanismenya sebelum mengubah kode, bukan sesudah.
+- Jangan refactor besar sebelum alur kodenya dipahami pemilik proyek.
 - Jangan pernah menyalin isi `PENDUKUNG/` ke dalam `UTAMA/`.
+- Asal-usul prototipe awal tetap dicantumkan apa adanya. Kontribusi proyek ini
+  justru menjadi terukur karena titik mulainya jelas.

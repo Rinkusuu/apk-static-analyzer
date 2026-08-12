@@ -1,0 +1,39 @@
+{
+  "true_positive": 20,
+  "false_negative": 0,
+  "false_positive": 0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "missed": [],
+  "false_positive_by_detector": {},
+  "false_positive_examples": [],
+  "risk": {
+    "total_risk_score": 1485,
+    "risk_from_false_positives": 0,
+    "false_positive_share": 0.0,
+    "per_artifact": [
+      {
+        "file": "AndroidManifest.xml",
+        "risk_level": "LOW",
+        "risk_score": 0
+      },
+      {
+        "file": "assets/index.android.bundle",
+        "risk_level": "CRITICAL",
+        "risk_score": 665
+      },
+      {
+        "file": "classes.dex",
+        "risk_level": "CRITICAL",
+        "risk_score": 820
+      }
+    ]
+  },
+  "inventory": {
+    "urls": 3,
+    "websockets": 1,
+    "ip_addresses": 1,
+    "api_paths": 2,
+    "android_components": 5
+  }
+}

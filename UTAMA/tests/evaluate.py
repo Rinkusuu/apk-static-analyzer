@@ -10,8 +10,11 @@ tests/expected.json untuk menghitung:
   - False Positive : nilai yang dilaporkan sebagai kredensial padahal bukan
   - Precision / Recall
 
-Hasilnya dicetak ke layar dan disimpan ke tests/baseline_report.json sebagai
-angka pembanding "sebelum perbaikan".
+Hasilnya dicetak ke layar dan disimpan ke tests/hasil_terkini.json.
+
+Berkas tests/baseline_report.json memuat pengukuran kondisi awal proyek dan
+sengaja dibekukan — berkas itu tidak pernah ditimpa, sebab ia menjadi angka
+pembanding tetap untuk seluruh perbaikan berikutnya.
 
 Jalankan:
     python3 tests/make_sample_apk.py     # sekali, untuk membuat sampel
@@ -33,7 +36,8 @@ import apk_analyzer  # noqa: E402
 
 APK_PATH = BASE_DIR / "sample.apk"
 EXPECTED_PATH = BASE_DIR / "expected.json"
-REPORT_PATH = BASE_DIR / "baseline_report.json"
+BASELINE_PATH = BASE_DIR / "baseline_report.json"
+REPORT_PATH = BASE_DIR / "hasil_terkini.json"
 
 # Kategori hasil yang diperlakukan sebagai "klaim kredensial" oleh analyzer.
 # Hanya kategori inilah yang dihitung false positive-nya, sebab kategori lain
@@ -87,9 +91,13 @@ def run_analyzer(apk_path: Path) -> dict:
 def load_detector_weights() -> dict:
     """Ambil pasangan nama-detektor -> bobot dari token_patterns di analyzer."""
     source = (PROJECT_DIR / "apk_analyzer.py").read_text(encoding="utf-8")
+    # Entri detektor boleh ditulis satu baris maupun terpecah beberapa baris,
+    # karena itu pencocokan dilakukan lintas baris (re.S).
     return {
         name: int(weight)
-        for name, weight in re.findall(r'^\s*"([^"]+)":\s*\(rb.*,\s*(\d+)\),\s*$', source, re.M)
+        for name, weight in re.findall(
+            r'"([^"]+)":\s*\(\s*rb.*?,\s*(\d+),?\s*\)', source, re.S
+        )
     }
 
 
@@ -217,6 +225,39 @@ def print_report(report: dict) -> None:
     print()
 
 
+def print_comparison(report: dict) -> None:
+    """Bandingkan hasil sekarang dengan kondisi awal proyek."""
+    if not BASELINE_PATH.exists():
+        return
+    base = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+
+    baris = [
+        ("True Positive", base["true_positive"], report["true_positive"], "{:d}"),
+        ("False Negative", base["false_negative"], report["false_negative"], "{:d}"),
+        ("False Positive", base["false_positive"], report["false_positive"], "{:d}"),
+        ("Precision", base["precision"], report["precision"], "{:.2%}"),
+        ("Recall", base["recall"], report["recall"], "{:.2%}"),
+        (
+            "Skor risiko",
+            base["risk"]["total_risk_score"],
+            report["risk"]["total_risk_score"],
+            "{:d}",
+        ),
+    ]
+
+    print("Perbandingan terhadap kondisi awal proyek:")
+    print(f"    {'Metrik':<18}{'Awal':>12}{'Sekarang':>12}{'Perubahan':>14}")
+    for nama, awal, kini, fmt in baris:
+        if awal == kini:
+            delta = "tetap"
+        elif isinstance(awal, float):
+            delta = f"{(kini - awal) * 100:+.2f} poin"
+        else:
+            delta = f"{kini - awal:+d}"
+        print(f"    {nama:<18}{fmt.format(awal):>12}{fmt.format(kini):>12}{delta:>14}")
+    print()
+
+
 def main() -> int:
     if not APK_PATH.exists() or not EXPECTED_PATH.exists():
         print("[!] Sampel belum dibuat. Jalankan dulu:")
@@ -228,8 +269,9 @@ def main() -> int:
     report = evaluate(run, expected)
 
     print_report(report)
+    print_comparison(report)
     REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"[+] Laporan baseline disimpan di: {REPORT_PATH}")
+    print(f"[+] Hasil disimpan di: {REPORT_PATH}")
 
     # Gagal hanya bila ada rahasia yang terlewat. Precision buruk sengaja
     # dibiarkan lolos agar terekam sebagai angka baseline "sebelum perbaikan".

@@ -154,7 +154,16 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         "Twilio API Key": (rb"SK[0-9a-fA-F]{32}", 85),
         "Mailgun API Key": (rb"key-[0-9a-zA-Z]{32}", 80),
         "SendGrid API Key": (rb"SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}", 85),
-        "Heroku API Key": (rb"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", 60),
+        # Deteksi berbasis konteks, bukan bentuk. Kunci Heroku berbentuk UUID
+        # biasa tanpa awalan khas seperti AKIA atau ghp_, sehingga secara bentuk
+        # mustahil dibedakan dari request-id maupun trace-id yang lazim ada
+        # ratusan di dalam satu APK. Karena itu UUID hanya dianggap kredensial
+        # apabila didahului label yang menyebut "heroku".
+        "Heroku API Key": (
+            rb"(?i)heroku[a-z0-9_\-]{0,20}[\"']?\s*[:=]\s*[\"']?"
+            rb"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+            60,
+        ),
         "Generic API Key": (rb"(?i)(?:api_key|apikey|api_secret|secret_key|access_token|auth_token|client_secret)\s*[:=]\s*[\"']([A-Za-z0-9_\-]{16,})[\"']", 75),
         "Private Key Block": (rb"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----", 100),
         "Certificate Block": (rb"-----BEGIN CERTIFICATE-----", 50),

@@ -1,4 +1,11 @@
-# Instruksi Proyek — APK Static Analyzer (Proyek Akhir KP)
+# Instruksi Proyek — APK Static Analyzer
+
+Pengembangan perangkat analisis statis APK, dikerjakan sebagai proyek akhir
+Kerja Praktik. Bertolak dari prototipe pengembang sebelumnya, kini dipegang
+sepenuhnya oleh pemilik proyek. Perlakukan sebagai proyek yang sedang
+dikembangkan, bukan sebagai revisi milik orang lain — namun jangan pula
+menghapus keterangan asal-usul prototipe, sebab justru itu yang membuat
+kontribusi proyek ini terukur.
 
 ## Wajib dibaca lebih dulu
 
