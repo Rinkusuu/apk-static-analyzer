@@ -83,6 +83,12 @@
       "must_detect": true
     },
     {
+      "category": "api_keys_and_tokens",
+      "detector": "Heroku API Key",
+      "value": "1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b",
+      "must_detect": true
+    },
+    {
       "category": "db_connections",
       "detector": null,
       "value": "mongodb://appuser:P4ssw0rd@db.internal.example.com:27017/prod",

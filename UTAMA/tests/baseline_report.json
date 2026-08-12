@@ -1,8 +1,8 @@
 {
-  "true_positive": 19,
+  "true_positive": 20,
   "false_negative": 0,
   "false_positive": 40,
-  "precision": 0.322,
+  "precision": 0.3333,
   "recall": 1.0,
   "missed": [],
   "false_positive_by_detector": {
@@ -40,9 +40,9 @@
     }
   ],
   "risk": {
-    "total_risk_score": 3750,
+    "total_risk_score": 3885,
     "risk_from_false_positives": 2400,
-    "false_positive_share": 0.64,
+    "false_positive_share": 0.6178,
     "per_artifact": [
       {
         "file": "AndroidManifest.xml",
@@ -52,7 +52,7 @@
       {
         "file": "assets/index.android.bundle",
         "risk_level": "CRITICAL",
-        "risk_score": 2930
+        "risk_score": 3065
       },
       {
         "file": "classes.dex",

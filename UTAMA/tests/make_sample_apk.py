@@ -52,6 +52,10 @@ PLANTED_SECRETS = [
     ),
     ("api_keys_and_tokens", "Private Key Block", "-----BEGIN RSA PRIVATE KEY-----"),
     ("api_keys_and_tokens", "Generic API Key", "s3cr3tV4lue_Ab12Cd34Ef56"),
+    # Kunci Heroku berbentuk UUID biasa, tanpa awalan khas seperti AKIA atau
+    # ghp_. Satu-satunya pembeda dari UUID biasa adalah label di sebelahnya,
+    # sehingga nilai ini hanya dapat dikenali lewat konteks.
+    ("api_keys_and_tokens", "Heroku API Key", "1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b"),
     ("db_connections", None, "mongodb://appuser:P4ssw0rd@db.internal.example.com:27017/prod"),
     ("db_connections", None, "jdbc:mysql://db.internal.example.com:3306/prod"),
     ("urls", None, "https://api.example-corp.com/v1/login"),
@@ -103,6 +107,7 @@ var __BUNDLE__=(function(){{
     sendgrid: "SG.abcdefghijklmnopqrstuv.abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
     client_secret: "s3cr3tV4lue_Ab12Cd34Ef56",
     api_key: "{DECOY_LOW_ENTROPY}",
+    HEROKU_API_KEY: "1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b",
     sessionToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkRlbW8ifQ.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXkw"
   }};
   var ROUTES = {{
