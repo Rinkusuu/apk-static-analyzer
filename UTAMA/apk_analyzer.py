@@ -1,18 +1,16 @@
 import argparse
-import json
-import re
-import zipfile
-import datetime
-import math
 import base64
-from pathlib import Path
+import datetime
+import json
+import math
+import re
+import traceback
+import zipfile
 from collections import Counter
-from typing import Dict, List, Any
+from pathlib import Path
+from typing import Any, Dict, List
 
 
-# ==============================================================================
-# 1. UTILITAS
-# ==============================================================================
 def calculate_shannon_entropy(data: bytes) -> float:
     if not data:
         return 0.0
@@ -25,54 +23,71 @@ def extract_apk(apk_path: Path, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_root = output_dir.resolve()
     with zipfile.ZipFile(apk_path, "r") as apk:
-        # Defense-in-depth terhadap Zip Slip. zipfile.extractall() bawaan Python
-        # sudah menyanitasi "../", namun keamanan itu bergantung pada perilaku
-        # internalnya. Pemeriksaan eksplisit di bawah menjadikan jaminan itu
-        # tersurat: setiap entri harus jatuh di dalam output_dir; bila ada yang
-        # mengarah keluar, ekstraksi dibatalkan.
         for member in apk.namelist():
             target = (output_root / member).resolve()
             if target != output_root and output_root not in target.parents:
                 raise ValueError(
-                    f"Entri APK mencoba menulis di luar direktori tujuan (Zip Slip): {member!r}"
+                    f"Entri APK menulis di luar direktori tujuan (Zip Slip): {member!r}"
                 )
         apk.extractall(output_dir)
 
 
 def find_artifacts(root_dir: Path) -> List[Path]:
-    artifacts = []
-    # React Native
+    artifacts: List[Path] = []
     artifacts.extend(root_dir.rglob("*.bundle"))
     artifacts.extend(root_dir.rglob("*.jsbundle"))
-    # Kotlin / Java
     artifacts.extend(root_dir.rglob("*.dex"))
-    # Flutter
     artifacts.extend(root_dir.rglob("libflutter.so"))
     artifacts.extend(root_dir.rglob("libapp.so"))
     artifacts.extend(root_dir.rglob("*_blob.bin"))
     artifacts.extend(root_dir.rglob("*.dart"))
-    # Android Manifest (binary XML, tapi masih mengandung string)
     artifacts.extend(root_dir.rglob("AndroidManifest.xml"))
-    # Fallback: jika tidak ada yang ditemukan, cari file terbesar
     if not artifacts:
         all_files = [f for f in root_dir.rglob("*") if f.is_file()]
-        if all_files:
-            all_files.sort(key=lambda x: x.stat().st_size, reverse=True)
-            artifacts = all_files[:5]
-    return sorted(list(set(artifacts)))
+        all_files.sort(key=lambda x: x.stat().st_size, reverse=True)
+        artifacts = all_files[:5]
+    return sorted(set(artifacts))
 
 
-# ==============================================================================
-# 2. MESIN ANALISIS (MEKANISME VERSI ASLI: re.findall + read_bytes)
-# ==============================================================================
+TOKEN_PATTERNS = {
+    "AWS Access Key": (rb"(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}", 100),
+    "Google API Key": (rb"AIza[0-9A-Za-z\-_]{35}", 90),
+    "GitHub Token": (rb"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}", 95),
+    "GitLab Token": (rb"glpat-[A-Za-z0-9\-_]{20,}", 95),
+    "Telegram Bot Token": (rb"[0-9]{8,10}:AA[0-9A-Za-z\-_]{33}", 85),
+    "Slack Token": (rb"xox[baprs]-[0-9a-zA-Z\-]{10,}", 80),
+    "Slack Webhook": (rb"https://hooks\.slack\.com/services/T[a-zA-Z0-9_]{8}/B[a-zA-Z0-9_]{8}/[a-zA-Z0-9_]{24}", 80),
+    "Discord Webhook": (rb"https://discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9\-_]{60,}", 80),
+    "Firebase URL": (rb"https://[a-z0-9\-]+\.firebaseio\.com", 70),
+    "JWT Token": (rb"eyJ[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_.+/=]{10,}", 85),
+    "Stripe Key": (rb"(?:pk|sk)_(?:live|test)_[0-9a-zA-Z]{24,}", 95),
+    "Alibaba Cloud Key": (rb"LTAI[A-Za-z0-9]{20}", 90),
+    "Twilio API Key": (rb"SK[0-9a-fA-F]{32}", 85),
+    "Mailgun API Key": (rb"key-[0-9a-zA-Z]{32}", 80),
+    "SendGrid API Key": (rb"SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}", 85),
+    "Heroku API Key": (
+        rb"(?i)heroku[a-z0-9_\-]{0,20}[\"']?\s*[:=]\s*[\"']?"
+        rb"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+        60,
+    ),
+    "Generic API Key": (rb"(?i)(?:api_key|apikey|api_secret|secret_key|access_token|auth_token|client_secret)\s*[:=]\s*[\"']([A-Za-z0-9_\-]{16,})[\"']", 75),
+    "Private Key Block": (rb"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----", 100),
+    "Certificate Block": (rb"-----BEGIN CERTIFICATE-----", 50),
+}
+
+RISK_THRESHOLDS = ((90, "CRITICAL"), (70, "HIGH"), (50, "MEDIUM"))
+MAX_BASE64_DECODES = 50
+MAX_FILE_SIZE = 300 * 1024 * 1024
+
+
 def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     file_size = artifact_path.stat().st_size
-    if file_size > 300 * 1024 * 1024:
+    if file_size > MAX_FILE_SIZE:
         return {"file": artifact_path.name, "error": "File >300MB, dilewati."}
 
     raw_bytes = artifact_path.read_bytes()
 
-    results = {
+    results: Dict[str, set] = {
         "urls": set(),
         "websockets": set(),
         "ip_addresses": set(),
@@ -88,27 +103,18 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         "decoded_secrets": set(),
         "keywords_found": set(),
     }
-    # Bobot dicatat PER TEMUAN UNIK, bukan ditambahkan per kecocokan. Kunci dict
-    # adalah string temuan itu sendiri, sehingga temuan yang berulang (mis. token
-    # yang sama muncul puluhan kali) hanya dihitung satu kali. Skor akhir dihitung
-    # dari kumpulan bobot ini pada bagian N.
+    # Bobot per temuan unik; skor akhir dihitung dari kumpulan ini (bagian N).
     finding_weights: Dict[str, int] = {}
 
-    # ──────────────────────────────────────────────
-    # A. URL & WEBSOCKET
-    # ──────────────────────────────────────────────
+    # A. URL & websocket
     for url in re.findall(rb"https?://[^\s\"'`\\<>\(\)\{\}\[\]]+", raw_bytes):
         cleaned = url.decode("utf-8", errors="ignore").rstrip(".,);:]")
         if len(cleaned) > 10:
             results["urls"].add(cleaned)
-
     for ws in re.findall(rb"wss?://[^\s\"'`\\<>\(\)\{\}\[\]]+", raw_bytes):
-        cleaned = ws.decode("utf-8", errors="ignore").rstrip(".,);:]")
-        results["websockets"].add(cleaned)
+        results["websockets"].add(ws.decode("utf-8", errors="ignore").rstrip(".,);:]"))
 
-    # ──────────────────────────────────────────────
-    # B. IP ADDRESS
-    # ──────────────────────────────────────────────
+    # B. IP address
     for ip in re.findall(
         rb"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b",
         raw_bytes,
@@ -117,9 +123,7 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         if not ip_str.startswith(("127.", "0.0.0.0", "255.255.255.", "10.0.2.")):
             results["ip_addresses"].add(ip_str)
 
-    # ──────────────────────────────────────────────
-    # C. API PATHS
-    # ──────────────────────────────────────────────
+    # C. API paths
     for path in re.findall(
         rb"[\"'](/(?:api|apimobile|v[0-9]+|graphql|rest|auth|user|admin|wp-json|oauth|token|session|upload|download|payment|checkout)[a-zA-Z0-9._/\-]*)[\"']",
         raw_bytes,
@@ -127,9 +131,7 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     ):
         results["api_paths"].add(path.decode("utf-8", errors="ignore"))
 
-    # ──────────────────────────────────────────────
-    # D. ACTION ENDPOINTS
-    # ──────────────────────────────────────────────
+    # D. Action endpoints
     action_patterns = [
         rb"[\"']((?:get|post|put|delete|check|fetch|update|create|remove|detail|user|auth|list|verify|validate|reset|confirm|send|receive)[a-zA-Z0-9_-]{3,50})[\"']",
         rb"\b(?:[a-zA-Z0-9_-]{0,20}(?:checkout|checkin|detail|user|profile|dashboard|settings|notification)[a-zA-Z0-9_-]{0,20})\b",
@@ -140,8 +142,6 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
             act_str = act.decode("utf-8", errors="ignore")
             if len(act_str) > 4 and act_str.lower() not in skip_words:
                 results["action_endpoints"].add(act_str)
-
-    # Key-Value endpoint extraction
     for kv in re.findall(
         rb"[\"']?(?:action|endpoint|route|path|method|name|url|uri)[\"']?\s*[:=]\s*[\"']([a-zA-Z0-9_\-/.]{3,60})[\"']",
         raw_bytes,
@@ -151,59 +151,18 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         if kv_str.upper() not in {"GET", "POST", "PUT", "DELETE", "PATCH", "JSON", "TRUE", "FALSE", "NULL"}:
             results["action_endpoints"].add(kv_str)
 
-    # ──────────────────────────────────────────────
-    # E. TOKEN & CREDENTIALS (MEKANISME ASLI: re.findall)
-    # ──────────────────────────────────────────────
-    token_patterns = {
-        "AWS Access Key": (rb"(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}", 100),
-        "Google API Key": (rb"AIza[0-9A-Za-z\-_]{35}", 90),
-        "GitHub Token": (rb"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}", 95),
-        "GitLab Token": (rb"glpat-[A-Za-z0-9\-_]{20,}", 95),
-        "Telegram Bot Token": (rb"[0-9]{8,10}:AA[0-9A-Za-z\-_]{33}", 85),
-        "Slack Token": (rb"xox[baprs]-[0-9a-zA-Z\-]{10,}", 80),
-        "Slack Webhook": (rb"https://hooks\.slack\.com/services/T[a-zA-Z0-9_]{8}/B[a-zA-Z0-9_]{8}/[a-zA-Z0-9_]{24}", 80),
-        "Discord Webhook": (rb"https://discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9\-_]{60,}", 80),
-        "Firebase URL": (rb"https://[a-z0-9\-]+\.firebaseio\.com", 70),
-        "JWT Token": (rb"eyJ[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_.+/=]{10,}", 85),
-        "Stripe Key": (rb"(?:pk|sk)_(?:live|test)_[0-9a-zA-Z]{24,}", 95),
-        "Alibaba Cloud Key": (rb"LTAI[A-Za-z0-9]{20}", 90),
-        "Twilio API Key": (rb"SK[0-9a-fA-F]{32}", 85),
-        "Mailgun API Key": (rb"key-[0-9a-zA-Z]{32}", 80),
-        "SendGrid API Key": (rb"SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}", 85),
-        # Deteksi berbasis konteks, bukan bentuk. Kunci Heroku berbentuk UUID
-        # biasa tanpa awalan khas seperti AKIA atau ghp_, sehingga secara bentuk
-        # mustahil dibedakan dari request-id maupun trace-id yang lazim ada
-        # ratusan di dalam satu APK. Karena itu UUID hanya dianggap kredensial
-        # apabila didahului label yang menyebut "heroku".
-        "Heroku API Key": (
-            rb"(?i)heroku[a-z0-9_\-]{0,20}[\"']?\s*[:=]\s*[\"']?"
-            rb"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
-            60,
-        ),
-        "Generic API Key": (rb"(?i)(?:api_key|apikey|api_secret|secret_key|access_token|auth_token|client_secret)\s*[:=]\s*[\"']([A-Za-z0-9_\-]{16,})[\"']", 75),
-        "Private Key Block": (rb"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----", 100),
-        "Certificate Block": (rb"-----BEGIN CERTIFICATE-----", 50),
-    }
-
-    for name, (pattern, weight) in token_patterns.items():
-        matches = re.findall(pattern, raw_bytes)
-        for match in matches:
+    # E. Token & kredensial
+    for name, (pattern, weight) in TOKEN_PATTERNS.items():
+        for match in re.findall(pattern, raw_bytes):
             if isinstance(match, tuple):
                 match = match[0]
-            token_str = match.decode("utf-8", errors="ignore")
-
-            # Filter entropi HANYA untuk Generic API Key
-            if name == "Generic API Key":
-                if calculate_shannon_entropy(match) < 3.8:
-                    continue
-
-            finding_key = f"[{name}] {token_str}"
+            if name == "Generic API Key" and calculate_shannon_entropy(match) < 3.8:
+                continue
+            finding_key = f"[{name}] {match.decode('utf-8', errors='ignore')}"
             results["api_keys_and_tokens"].add(finding_key)
             finding_weights[finding_key] = weight
 
-    # ──────────────────────────────────────────────
-    # F. SENSITIVE HEADERS
-    # ──────────────────────────────────────────────
+    # F. Sensitive headers
     for h in re.findall(
         rb"[\"'](Authorization|X-API-Key|X-Auth-Token|X-Access-Token|X-Forwarded-For|X-Real-IP|Bearer\s+[A-Za-z0-9\-._~+/]+=*)[\"']",
         raw_bytes,
@@ -211,31 +170,23 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     ):
         results["sensitive_headers"].add(h.decode("utf-8", errors="ignore"))
 
-    # ──────────────────────────────────────────────
-    # G. ENVIRONMENT VARIABLES
-    # ──────────────────────────────────────────────
+    # G. Environment variables
     for env in re.findall(rb"\b(?:REACT_APP_|EXPO_PUBLIC_|NEXT_PUBLIC_|APP_|FLUTTER_|VITE_|NUXT_)[A-Z0-9_]{3,}\b", raw_bytes):
         results["env_variables"].add(env.decode("utf-8", errors="ignore"))
 
-    # ──────────────────────────────────────────────
-    # H. STORAGE KEYS
-    # ──────────────────────────────────────────────
+    # H. Storage keys
     for key in re.findall(rb"[\"'](@[a-zA-Z0-9_:/.\-]+)[\"']", raw_bytes):
         results["storage_keys"].add(key.decode("utf-8", errors="ignore"))
     for key in re.findall(rb"[\"']((?:shared_preferences_|flutter\.secure_storage|AsyncStorage_)[a-zA-Z0-9_]+)[\"']", raw_bytes):
         results["storage_keys"].add(key.decode("utf-8", errors="ignore"))
 
-    # ──────────────────────────────────────────────
-    # I. DATABASE CONNECTION STRINGS
-    # ──────────────────────────────────────────────
+    # I. Database connection strings
     for db in re.findall(rb"(?i)(?:jdbc:(?:mysql|postgresql|oracle|sqlserver)://[^\s\"']{10,}|mongodb(?:\+srv)?://[^\s\"']{10,}|redis://[^\s\"']{10,}|amqp://[^\s\"']{10,})", raw_bytes):
         db_str = db.decode("utf-8", errors="ignore")
         results["db_connections"].add(db_str)
         finding_weights[f"[db] {db_str}"] = 95
 
-    # ──────────────────────────────────────────────
-    # J. FLUTTER IPC
-    # ──────────────────────────────────────────────
+    # J. Flutter IPC
     for ch in re.findall(rb"[\"']((?:MethodChannel|EventChannel|BasicMessageChannel)\([\"'][^\"']+[\"']\))[\"']", raw_bytes):
         results["flutter_ipc"].add(ch.decode("utf-8", errors="ignore"))
     for inv in re.findall(rb"[\"']([a-zA-Z_]+(?:Channel|Plugin|Handler))[\"']", raw_bytes):
@@ -243,43 +194,32 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         if len(inv_str) > 6:
             results["flutter_ipc"].add(inv_str)
 
-    # ──────────────────────────────────────────────
-    # K. ANDROID COMPONENTS (dari binary XML & string pool)
-    # ──────────────────────────────────────────────
+    # K. Android components
     for comp in re.findall(rb"[\"']((?:com|org|net|io)\.[a-zA-Z0-9_]+\.[a-zA-Z0-9_.]+(?:Activity|Service|Receiver|Provider|Fragment))[\"']", raw_bytes):
         results["android_components"].add(comp.decode("utf-8", errors="ignore"))
     for perm in re.findall(rb"[\"'](android\.permission\.[A-Z_]+)[\"']", raw_bytes):
         results["android_components"].add(perm.decode("utf-8", errors="ignore"))
 
-    # ──────────────────────────────────────────────
-    # L. ANTI-OBFUSCATION: BASE64 DECODE PASS
-    # ──────────────────────────────────────────────
-    b64_candidates = re.findall(rb"(?:[A-Za-z0-9+/]{4}){8,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?", raw_bytes)
+    # L. Base64 decode pass (anti-obfuskasi)
+    sensitive_indicators = ("http", "api", "key", "token", "secret", "pass", "auth", "admin", "login", "bearer", "jdbc", "mongodb")
     decoded_count = 0
-    for candidate in b64_candidates:
-        if decoded_count >= 50:  # Batasi untuk performa
+    for candidate in re.findall(rb"(?:[A-Za-z0-9+/]{4}){8,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?", raw_bytes):
+        if decoded_count >= MAX_BASE64_DECODES:
             break
         try:
             decoded_bytes = base64.b64decode(candidate, validate=True)
-            if len(decoded_bytes) < 8:
-                continue
-            entropy = calculate_shannon_entropy(decoded_bytes)
-            if entropy < 3.5:
-                continue
-            decoded_str = decoded_bytes.decode("utf-8", errors="ignore")
-            # Cek apakah mengandung indikator sensitif
-            sensitive_indicators = ["http", "api", "key", "token", "secret", "pass", "auth", "admin", "login", "Bearer", "jdbc", "mongodb"]
-            if any(ind.lower() in decoded_str.lower() for ind in sensitive_indicators):
-                secret_str = decoded_str[:200]
-                results["decoded_secrets"].add(secret_str)
-                finding_weights[f"[decoded] {secret_str}"] = 70
-                decoded_count += 1
         except Exception:
             continue
+        if len(decoded_bytes) < 8 or calculate_shannon_entropy(decoded_bytes) < 3.5:
+            continue
+        decoded_str = decoded_bytes.decode("utf-8", errors="ignore")
+        if any(ind in decoded_str.lower() for ind in sensitive_indicators):
+            secret_str = decoded_str[:200]
+            results["decoded_secrets"].add(secret_str)
+            finding_weights[f"[decoded] {secret_str}"] = 70
+            decoded_count += 1
 
-    # ──────────────────────────────────────────────
-    # M. KEYWORDS
-    # ──────────────────────────────────────────────
+    # M. Keywords
     keywords = [
         b"login", b"logout", b"register", b"auth", b"user", b"profile",
         b"upload", b"download", b"payment", b"admin", b"graphql", b"websocket",
@@ -293,30 +233,15 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         if re.search(rb"\b" + kw + rb"\b", raw_bytes, re.IGNORECASE):
             results["keywords_found"].add(kw.decode("utf-8", errors="ignore").strip())
 
-    # ──────────────────────────────────────────────
-    # N. RISK CLASSIFICATION (severity + breadth, terbatas)
-    # ──────────────────────────────────────────────
-    # Skor dibentuk dua komponen agar mencerminkan risiko sebenarnya, bukan
-    # sekadar volume:
-    #   severity  = bobot temuan paling berbahaya (0-100). Satu kunci AWS sudah
-    #               cukup menaikkan risiko, tanpa perlu menunggu banyak temuan.
-    #   breadth   = bonus kecil bila temuannya beragam jenisnya, DIBATASI +20,
-    #               sehingga banyaknya temuan tak bisa mendominasi tingkat risiko.
-    # Karena finding_weights berbasis temuan unik, duplikat tidak menggelembungkan
-    # skor. Skor maksimum terikat di 120.
+    # N. Risk classification: severity (temuan terparah) + breadth (bonus terbatas)
     severity = max(finding_weights.values(), default=0)
-    breadth = len(finding_weights)
-    breadth_bonus = min(max(breadth - 1, 0), 5) * 4
+    breadth_bonus = min(max(len(finding_weights) - 1, 0), 5) * 4
     risk_score = severity + breadth_bonus
-
-    if risk_score >= 90:
-        risk_level = "CRITICAL"
-    elif risk_score >= 70:
-        risk_level = "HIGH"
-    elif risk_score >= 50:
-        risk_level = "MEDIUM"
-    else:
-        risk_level = "LOW"
+    risk_level = "LOW"
+    for threshold, level in RISK_THRESHOLDS:
+        if risk_score >= threshold:
+            risk_level = level
+            break
 
     return {
         "file": artifact_path.name,
@@ -331,33 +256,17 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
             "total_decoded_secrets": len(results["decoded_secrets"]),
             "total_keywords": len(results["keywords_found"]),
         },
-        "urls": sorted(results["urls"]),
-        "websockets": sorted(results["websockets"]),
-        "ip_addresses": sorted(results["ip_addresses"]),
-        "api_paths": sorted(results["api_paths"]),
-        "action_endpoints": sorted(results["action_endpoints"]),
-        "api_keys_and_tokens": sorted(results["api_keys_and_tokens"]),
-        "sensitive_headers": sorted(results["sensitive_headers"]),
-        "env_variables": sorted(results["env_variables"]),
-        "storage_keys": sorted(results["storage_keys"]),
-        "db_connections": sorted(results["db_connections"]),
-        "flutter_ipc": sorted(results["flutter_ipc"]),
-        "android_components": sorted(results["android_components"]),
-        "decoded_secrets": sorted(results["decoded_secrets"]),
-        "keywords_found": sorted(results["keywords_found"]),
+        **{key: sorted(value) for key, value in results.items()},
     }
 
 
-# ==============================================================================
-# 3. MAIN PIPELINE (SEQUENTIAL - STABIL DI WINDOWS)
-# ==============================================================================
-def main():
-    parser = argparse.ArgumentParser(description="Multi-Framework APK Static Analyzer (Stable)")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Multi-framework APK static analyzer")
     parser.add_argument("apk_path", type=Path, help="Path ke file .apk target")
     args = parser.parse_args()
 
     apk_path = args.apk_path.resolve()
-    if not apk_path.exists() or not apk_path.is_file():
+    if not apk_path.is_file():
         print(f"[!] Error: File '{apk_path}' tidak ditemukan.")
         return
 
@@ -374,11 +283,9 @@ def main():
 
         print("[*] Memindai artefak (RN / Kotlin / Flutter)...")
         artifacts = find_artifacts(extract_dir)
-
         if not artifacts:
             print("[!] Tidak ditemukan artefak untuk dianalisis.")
             return
-
         print(f"[*] Ditemukan {len(artifacts)} artefak.\n")
 
         final_result = {
@@ -389,21 +296,17 @@ def main():
             },
             "artifacts": {},
         }
-
         for artifact in artifacts:
             relative_path = str(artifact.relative_to(extract_dir))
-            size_kb = artifact.stat().st_size / 1024
-            print(f"[*] Menganalisis: {relative_path} ({size_kb:.1f} KB)")
+            print(f"[*] Menganalisis: {relative_path} ({artifact.stat().st_size / 1024:.1f} KB)")
             result = analyze_artifact(artifact)
             final_result["artifacts"][relative_path] = result
             print(f"    -> Risiko: {result['risk_level']} | Token: {result['summary']['total_tokens_found']} | URL: {result['summary']['total_urls']}")
 
-        # Urutkan berdasarkan risk_score descending
         final_result["artifacts"] = dict(
             sorted(final_result["artifacts"].items(), key=lambda x: x[1].get("risk_score", 0), reverse=True)
         )
 
-        # Tulis JSON
         output_json = output_dir / "reverse_results.json"
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump(final_result, f, indent=4, ensure_ascii=False)
@@ -413,7 +316,6 @@ def main():
 
     except Exception as e:
         print(f"[!] Fatal Error: {e}")
-        import traceback
         traceback.print_exc()
 
 

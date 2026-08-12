@@ -4,7 +4,8 @@ Dokumen ini menjelaskan cara kerja `apk_analyzer.py` secara menyeluruh, dari APK
 masuk sampai laporan JSON keluar. Ditulis sebagai bahan Bab Analisis & Perancangan
 laporan Kerja Praktik.
 
-Seluruh rujukan baris merujuk pada berkas `apk_analyzer.py` di direktori proyek.
+Seluruh rujukan fungsi dan blok merujuk pada berkas `apk_analyzer.py` di
+direktori proyek.
 
 ---
 
@@ -44,26 +45,26 @@ tahu bedanya.
                     │
         TAHAP 1     ▼
     ┌───────────────────────────────┐
-    │ extract_apk()      (baris 24) │   APK dibuka sebagai ZIP,
+    │ extract_apk()                 │   APK dibuka sebagai ZIP,
     │ zipfile.extractall            │   seluruh isi diekstrak
     └───────────────┬───────────────┘
                     │
         TAHAP 2     ▼
     ┌───────────────────────────────┐
-    │ find_artifacts()   (baris 30) │   Pilih hanya berkas yang
+    │ find_artifacts()              │   Pilih hanya berkas yang
     │ rglob per ekstensi            │   memuat kode / konfigurasi
     └───────────────┬───────────────┘
                     │
                     │  untuk setiap artefak
         TAHAP 3     ▼
     ┌───────────────────────────────┐
-    │ analyze_artifact() (baris 56) │   read_bytes() lalu
-    │ 13 blok pola (A s.d. M)       │   ±25 regex disapukan
+    │ analyze_artifact()            │   read_bytes() lalu
+    │ 13 blok deteksi (A s.d. M)    │   ±25 regex disapukan
     └───────────────┬───────────────┘
                     │
         TAHAP 4     ▼
     ┌───────────────────────────────┐
-    │ Klasifikasi risiko (baris 271)│   risk_score → risk_level
+    │ blok N: klasifikasi risiko    │   risk_score → risk_level
     └───────────────┬───────────────┘
                     │
                     ▼
@@ -76,7 +77,7 @@ tahu bedanya.
 
 ## 3. Tahap 1 — Ekstraksi APK
 
-**Fungsi:** `extract_apk()`, baris 24–27.
+**Fungsi:** `extract_apk()`.
 
 Berkas `.apk` sebenarnya adalah arsip ZIP biasa dengan struktur direktori yang
 sudah dibakukan Android. Karena itu ekstraksinya cukup menggunakan modul standar
@@ -86,6 +87,9 @@ sudah dibakukan Android. Karena itu ekstraksinya cukup menggunakan modul standar
 with zipfile.ZipFile(apk_path, "r") as apk:
     apk.extractall(output_dir)
 ```
+
+Fungsi sesungguhnya menambahkan pemeriksaan jalur sebelum `extractall` sebagai
+pengaman Zip Slip; lihat bagian 9.3.
 
 Isi khas sebuah APK setelah diekstrak:
 
@@ -105,7 +109,7 @@ Hasil ekstraksi ditempatkan pada `<nama_apk>_analysis_<timestamp>/extracted_file
 
 ## 4. Tahap 2 — Identifikasi Artefak
 
-**Fungsi:** `find_artifacts()`, baris 30–50.
+**Fungsi:** `find_artifacts()`.
 
 Tidak semua berkas hasil ekstraksi perlu dianalisis. Gambar, layout, dan berkas
 tanda tangan tidak memuat endpoint maupun kredensial. Tahap ini menyaring hanya
@@ -119,7 +123,7 @@ dengan kerangka kerja yang dipakai aplikasi target:
 | Flutter | `libflutter.so`, `libapp.so`, `*_blob.bin`, `*.dart` | Kode Dart dikompilasi ke biner native, namun literal string tetap tersimpan |
 | Semua | `AndroidManifest.xml` | Memuat daftar permission dan komponen aplikasi |
 
-Terdapat pula mekanisme **fallback** (baris 45–49): apabila tidak satu pun pola di
+Terdapat pula mekanisme **fallback**: apabila tidak satu pun pola di
 atas cocok — misalnya aplikasi memakai kerangka kerja yang tidak dikenali — maka
 tool mengambil **5 berkas terbesar** sebagai artefak. Dasar pemikirannya, berkas
 terbesar dalam sebuah APK hampir selalu berisi kode, bukan aset.
@@ -131,7 +135,7 @@ artefak ganda dan urutannya deterministik.
 
 ## 5. Tahap 3 — Analisis Pola
 
-**Fungsi:** `analyze_artifact()`, baris 56–307. Ini adalah inti tool.
+**Fungsi:** `analyze_artifact()`. Ini adalah inti tool.
 
 ### 5.1 Prinsip Dasar
 
@@ -148,7 +152,7 @@ ditulis sebagai *bytes pattern* (`rb"..."`) dan diterapkan secara seragam pada
 berkas teks maupun biner. Inilah yang memungkinkan satu mesin analisis yang sama
 menangani React Native, Kotlin, dan Flutter sekaligus.
 
-Terdapat pembatas ukuran: berkas di atas 300 MB dilewati (baris 58) untuk
+Terdapat pembatas ukuran: berkas di atas 300 MB dilewati untuk
 mencegah pemakaian memori berlebih.
 
 ### 5.2 Tiga Belas Blok Deteksi
@@ -156,21 +160,24 @@ mencegah pemakaian memori berlebih.
 Analisis dibagi menjadi 13 blok berlabel A sampai M, masing-masing mengisi satu
 kategori hasil. Seluruh hasil ditampung dalam `set` agar duplikat otomatis hilang.
 
-| Blok | Kategori | Yang dicari | Baris |
-|---|---|---|---|
-| A | `urls`, `websockets` | `http://`, `https://`, `ws://`, `wss://` | 84–91 |
-| B | `ip_addresses` | Alamat IPv4 | 96–102 |
-| C | `api_paths` | Path seperti `/api/...`, `/v1/...`, `/graphql` | 107–112 |
-| D | `action_endpoints` | Nama aksi (`getUser`, `checkoutOrder`) dan pasangan kunci-nilai `endpoint: "..."` | 117–136 |
-| E | `api_keys_and_tokens` | 19 pola kredensial | 141–176 |
-| F | `sensitive_headers` | `Authorization`, `X-API-Key`, `Bearer ...` | 181–186 |
-| G | `env_variables` | `REACT_APP_`, `EXPO_PUBLIC_`, `NEXT_PUBLIC_`, `FLUTTER_`, dll. | 191–192 |
-| H | `storage_keys` | Kunci penyimpanan lokal (`@app:token`, `shared_preferences_*`) | 197–200 |
-| I | `db_connections` | `jdbc:`, `mongodb://`, `redis://`, `amqp://` | 205–207 |
-| J | `flutter_ipc` | `MethodChannel`, `EventChannel`, nama `*Handler` / `*Plugin` | 212–217 |
-| K | `android_components` | Activity/Service/Receiver dan `android.permission.*` | 222–225 |
-| L | `decoded_secrets` | Rahasia yang tersembunyi di balik enkode Base64 | 230–250 |
-| M | `keywords_found` | 40 kata kunci indikatif (`password`, `frida`, `keystore`, dll.) | 255–266 |
+| Blok | Kategori | Yang dicari |
+|---|---|---|
+| A | `urls`, `websockets` | `http://`, `https://`, `ws://`, `wss://` |
+| B | `ip_addresses` | Alamat IPv4 |
+| C | `api_paths` | Path seperti `/api/...`, `/v1/...`, `/graphql` |
+| D | `action_endpoints` | Nama aksi (`getUser`, `checkoutOrder`) dan pasangan kunci-nilai `endpoint: "..."` |
+| E | `api_keys_and_tokens` | 19 pola kredensial |
+| F | `sensitive_headers` | `Authorization`, `X-API-Key`, `Bearer ...` |
+| G | `env_variables` | `REACT_APP_`, `EXPO_PUBLIC_`, `NEXT_PUBLIC_`, `FLUTTER_`, dll. |
+| H | `storage_keys` | Kunci penyimpanan lokal (`@app:token`, `shared_preferences_*`) |
+| I | `db_connections` | `jdbc:`, `mongodb://`, `redis://`, `amqp://` |
+| J | `flutter_ipc` | `MethodChannel`, `EventChannel`, nama `*Handler` / `*Plugin` |
+| K | `android_components` | Activity/Service/Receiver dan `android.permission.*` |
+| L | `decoded_secrets` | Rahasia yang tersembunyi di balik enkode Base64 |
+| M | `keywords_found` | 40 kata kunci indikatif (`password`, `frida`, `keystore`, dll.) |
+
+Klasifikasi risiko (blok N) tidak mengisi kategori temuan, melainkan mengubah
+temuan menjadi skor dan level; dibahas di bagian 6.
 
 ### 5.3 Blok E — Deteksi Kredensial
 
@@ -178,7 +185,7 @@ Blok ini yang paling menentukan skor risiko. Strukturnya berupa kamus: nama
 detektor dipetakan ke pasangan (pola, bobot risiko).
 
 ```python
-token_patterns = {
+TOKEN_PATTERNS = {
     "AWS Access Key": (rb"(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}", 100),
     "Google API Key": (rb"AIza[0-9A-Za-z\-_]{35}", 90),
     ...
@@ -191,13 +198,13 @@ polanya spesifik dan dampak kebocorannya besar, sementara blok sertifikat diberi
 bobot 50 karena keberadaannya sering wajar dan tidak selalu berbahaya.
 
 **Penyaringan entropi.** Khusus detektor `Generic API Key`, hasil pencocokan masih
-disaring dengan **entropi Shannon** (baris 171–173). Pola generik seperti
+disaring dengan **entropi Shannon** (blok E). Pola generik seperti
 `api_key = "..."` terlalu longgar dan akan banyak menangkap nilai *placeholder*.
 Entropi mengukur keacakan karakter: kredensial sungguhan bersifat acak sehingga
 entropinya tinggi, sedangkan placeholder seperti `"aaaaaaaaaaaaaaaaaaaa"` sangat
 berulang sehingga entropinya mendekati nol. Ambang yang dipakai adalah 3.8.
 
-Perhitungannya ada pada `calculate_shannon_entropy()`, baris 16–21:
+Perhitungannya ada pada `calculate_shannon_entropy()`:
 
 ```
 H = -Σ p(x) · log₂ p(x)
@@ -282,7 +289,7 @@ Keluaran berupa satu berkas `reverse_results.json` di dalam direktori
 }
 ```
 
-Artefak diurutkan menurun berdasarkan `risk_score` (baris 361–363), sehingga
+Artefak diurutkan menurun berdasarkan `risk_score` di `main()`, sehingga
 berkas paling berisiko selalu tampil paling atas.
 
 Cara menjalankan:
