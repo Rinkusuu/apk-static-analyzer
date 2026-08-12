@@ -45,6 +45,23 @@ Aturan lengkap ada di `README.md`.
 - [x] Baseline "sebelum perbaikan" terkunci di `UTAMA/tests/baseline_report.json`
 - [x] Dokumentasi alur kerja lengkap (`UTAMA/docs/ALUR_KERJA.md`, 10 bagian)
 - [x] Direktori dipisah `UTAMA/` vs `PENDUKUNG/` agar tidak salah kumpul
+- [x] `tests/test_analyzer.py` diganti nama menjadi `tests/evaluate.py` (bukan
+      unit test pytest, melainkan harness pengukuran)
+- [x] Repositori git diinisialisasi, baseline dikunci sebagai commit pertama
+- [x] Di-push ke GitHub privat: https://github.com/Rinkusuu/apk-static-analyzer
+
+## Version Control
+
+Remote `origin` mengarah ke repositori **privat** `Rinkusuu/apk-static-analyzer`,
+branch `main`. Seluruh commit ber-author tunggal `Rinkusuu` tanpa trailer
+co-author — pemilik proyek adalah satu-satunya kontributor, dan ini disengaja.
+
+`PENDUKUNG/` dikunci di `.gitignore` dan tidak pernah masuk riwayat git. Sebelum
+melakukan push, pastikan ulang dengan `git ls-files | grep -i pendukung` yang
+harus kosong.
+
+Setiap perbaikan dibuat sebagai satu commit tersendiri agar diff-nya dapat
+dijadikan bukti "sebelum dan sesudah" pada laporan.
 
 ## Angka Baseline (sebelum perbaikan apa pun)
 
