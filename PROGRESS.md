@@ -79,7 +79,17 @@ Versi awal perangkat sudah berjalan dan mampu menemukan banyak hal, namun:
       **ditolak tegas**, bukan diam-diam disanitasi, dan agar keamanan tidak
       bergantung pada detail internal `extractall()`. Uji dipertahankan sebagai
       *regression test*.
-- [ ] Normalisasi skor risiko
+- [x] **Model skoring diganti menjadi severity + breadth (terikat 0–120).**
+      Model lama akumulatif tanpa batas punya tiga cacat: duplikat
+      menggelembungkan skor, tidak ada plafon sehingga APK besar otomatis
+      CRITICAL, dan banyak temuan lemah mengalahkan satu temuan berat. Model
+      baru: skor = bobot temuan terparah + bonus keragaman terbatas, dihitung
+      dari temuan unik. Diverifikasi `tests/test_scoring.py`. Akibatnya skala
+      skor berubah total — angka skor lama dan baru TIDAK sebanding langsung,
+      hanya precision/recall yang tetap sebanding.
+
+Fase 3 selesai. Precision 100%, recall 100%. Tiga uji hijau: evaluate,
+test_zip_slip, test_scoring.
 
 **Pelajaran metodologis dari langkah Zip Slip:** uji yang membantah hipotesis
 sama berharganya dengan yang membenarkan. Klaim keamanan diuji, bukan dipercaya

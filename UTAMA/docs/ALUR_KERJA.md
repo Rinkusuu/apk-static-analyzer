@@ -241,12 +241,15 @@ Sebelas kategori sisanya — URL, path API, permission, kata kunci, dan seterusn
 analis, tetapi tidak dianggap sebagai tuduhan sehingga tidak menaikkan skor.
 Pemisahan ini merupakan keputusan desain yang tepat dan patut dipertahankan.
 
-Klasifikasi akhir (baris 271–278):
+Cara skor tersebut dijadikan angka telah diperbarui dari model akumulatif
+menjadi model **severity + breadth** yang terikat; lihat bagian 8.5.
+
+Klasifikasi akhir:
 
 | Rentang skor | Level |
 |---|---|
-| ≥ 200 | `CRITICAL` |
-| ≥ 100 | `HIGH` |
+| ≥ 90 | `CRITICAL` |
+| ≥ 70 | `HIGH` |
 | ≥ 50 | `MEDIUM` |
 | < 50 | `LOW` |
 
@@ -346,7 +349,11 @@ Penghitungan FP hanya diterapkan pada kategori yang bersifat tuduhan
 | False Positive | 40 | **0** | −40 |
 | **Precision** | **33.33%** | **100.00%** | +66.67 poin |
 | **Recall** | **100.00%** | **100.00%** | tetap |
-| Skor risiko | 3885 | 1485 | −2400 |
+
+Skor risiko tidak dimasukkan ke tabel perbandingan karena skalanya berubah pada
+langkah 8.5 (model lama tak terbatas; model baru terikat 0–120), sehingga
+angkanya tidak sebanding langsung. Hanya precision dan recall yang definisinya
+sama lintas versi dan layak dibandingkan.
 
 Analisis atas kondisi awal:
 
@@ -390,6 +397,43 @@ setiap tiga temuan kredensial adalah alarm palsu. Perangkat dengan rasio semacam
 itu cenderung diabaikan analis, sehingga temuan sungguhan justru berisiko
 terlewat meskipun recall-nya sempurna.
 
+### 8.5 Perbaikan: Model Skoring Severity + Breadth
+
+Model skoring awal bersifat akumulatif tanpa batas dan mengandung tiga cacat:
+
+1. **Duplikat menggelembungkan skor.** Skor ditambah untuk setiap kecocokan,
+   padahal daftar temuan menyimpan nilai unik. Satu token yang berulang 50 kali
+   menaikkan skor 50 kali lipat, meski hanya tercatat sebagai satu temuan.
+2. **Tidak ada batas atas.** Skor menumpuk tanpa plafon, sehingga APK berukuran
+   besar hampir selalu mencapai `CRITICAL` semata karena volumenya.
+3. **Volume mengalahkan tingkat bahaya.** Empat blok sertifikat (bobot 50) yang
+   berjumlah 200 tergolong `CRITICAL`, sedangkan satu kunci AWS sungguhan (bobot
+   100) hanya `HIGH` — terbalik dari risiko sebenarnya.
+
+Model diganti menjadi dua komponen:
+
+| Komponen | Makna | Perhitungan |
+|---|---|---|
+| *severity* | seberapa berbahaya temuan terparah | bobot tertinggi di antara temuan unik (0–100) |
+| *breadth* | seberapa beragam temuannya | `min(jumlah_temuan_unik − 1, 5) × 4`, maksimum +20 |
+
+Skor akhir adalah `severity + breadth`, terikat pada rentang 0–120. Karena skor
+dihitung dari **temuan unik**, duplikat tidak lagi berpengaruh. Karena bonus
+keragaman dibatasi, volume tidak dapat mendominasi. Karena dasarnya adalah
+temuan terparah, satu kunci berbahaya langsung menaikkan tingkat risiko.
+
+Perilaku ini diverifikasi oleh `tests/test_scoring.py`:
+
+| Skenario | Model lama | Model baru |
+|---|---|---|
+| 1 kunci AWS | 100 → `HIGH` | 100 → `CRITICAL` |
+| 4 blok sertifikat | 200 → `CRITICAL` | 50 → `MEDIUM` |
+| 50 token identik | 4250 → `CRITICAL` | 100 → dihitung sekali |
+
+Sebagai konsekuensi, skala skor berubah total. Angka skor sebelum dan sesudah
+perbaikan ini **tidak dapat dibandingkan langsung**; hanya precision dan recall
+yang tetap sebanding lintas versi.
+
 ---
 
 ## 9. Keterbatasan yang Diketahui
@@ -403,10 +447,11 @@ generik, sehingga setiap UUID di dalam APK dianggap kredensial. Ini merupakan
 penyebab tunggal seluruh false positive pada pengukuran awal. Telah diperbaiki
 melalui deteksi berbasis konteks; lihat bagian 8.4.
 
-**9.2 Skor risiko tidak dinormalisasi.**
-Skor bertambah per kemunculan tanpa batas atas. Sebuah APK besar akan hampir
-selalu mencapai `CRITICAL` semata karena volumenya, sehingga ambang 200/100/50
-kehilangan daya beda.
+**9.2 ~~Skor risiko tidak dinormalisasi.~~ — SUDAH DIPERBAIKI.**
+Model skoring lama bertambah per kemunculan tanpa batas atas, sehingga duplikat
+menggelembungkan skor dan APK besar hampir selalu `CRITICAL` karena volumenya.
+Telah diganti dengan model *severity + breadth* yang terikat 0–120 dan berbasis
+temuan unik; lihat bagian 8.5.
 
 **9.3 Ketahanan terhadap Zip Slip — hipotesis yang diuji dan terbantah.**
 Zip Slip adalah kerentanan ketika entri arsip bernama `../../berkas` diekstrak

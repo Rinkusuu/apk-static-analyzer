@@ -88,7 +88,11 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         "decoded_secrets": set(),
         "keywords_found": set(),
     }
-    risk_score = 0
+    # Bobot dicatat PER TEMUAN UNIK, bukan ditambahkan per kecocokan. Kunci dict
+    # adalah string temuan itu sendiri, sehingga temuan yang berulang (mis. token
+    # yang sama muncul puluhan kali) hanya dihitung satu kali. Skor akhir dihitung
+    # dari kumpulan bobot ini pada bagian N.
+    finding_weights: Dict[str, int] = {}
 
     # ──────────────────────────────────────────────
     # A. URL & WEBSOCKET
@@ -193,8 +197,9 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
                 if calculate_shannon_entropy(match) < 3.8:
                     continue
 
-            results["api_keys_and_tokens"].add(f"[{name}] {token_str}")
-            risk_score += weight
+            finding_key = f"[{name}] {token_str}"
+            results["api_keys_and_tokens"].add(finding_key)
+            finding_weights[finding_key] = weight
 
     # ──────────────────────────────────────────────
     # F. SENSITIVE HEADERS
@@ -224,8 +229,9 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     # I. DATABASE CONNECTION STRINGS
     # ──────────────────────────────────────────────
     for db in re.findall(rb"(?i)(?:jdbc:(?:mysql|postgresql|oracle|sqlserver)://[^\s\"']{10,}|mongodb(?:\+srv)?://[^\s\"']{10,}|redis://[^\s\"']{10,}|amqp://[^\s\"']{10,})", raw_bytes):
-        results["db_connections"].add(db.decode("utf-8", errors="ignore"))
-        risk_score += 95
+        db_str = db.decode("utf-8", errors="ignore")
+        results["db_connections"].add(db_str)
+        finding_weights[f"[db] {db_str}"] = 95
 
     # ──────────────────────────────────────────────
     # J. FLUTTER IPC
@@ -264,8 +270,9 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
             # Cek apakah mengandung indikator sensitif
             sensitive_indicators = ["http", "api", "key", "token", "secret", "pass", "auth", "admin", "login", "Bearer", "jdbc", "mongodb"]
             if any(ind.lower() in decoded_str.lower() for ind in sensitive_indicators):
-                results["decoded_secrets"].add(decoded_str[:200])
-                risk_score += 70
+                secret_str = decoded_str[:200]
+                results["decoded_secrets"].add(secret_str)
+                finding_weights[f"[decoded] {secret_str}"] = 70
                 decoded_count += 1
         except Exception:
             continue
@@ -287,11 +294,24 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
             results["keywords_found"].add(kw.decode("utf-8", errors="ignore").strip())
 
     # ──────────────────────────────────────────────
-    # N. RISK CLASSIFICATION
+    # N. RISK CLASSIFICATION (severity + breadth, terbatas)
     # ──────────────────────────────────────────────
-    if risk_score >= 200:
+    # Skor dibentuk dua komponen agar mencerminkan risiko sebenarnya, bukan
+    # sekadar volume:
+    #   severity  = bobot temuan paling berbahaya (0-100). Satu kunci AWS sudah
+    #               cukup menaikkan risiko, tanpa perlu menunggu banyak temuan.
+    #   breadth   = bonus kecil bila temuannya beragam jenisnya, DIBATASI +20,
+    #               sehingga banyaknya temuan tak bisa mendominasi tingkat risiko.
+    # Karena finding_weights berbasis temuan unik, duplikat tidak menggelembungkan
+    # skor. Skor maksimum terikat di 120.
+    severity = max(finding_weights.values(), default=0)
+    breadth = len(finding_weights)
+    breadth_bonus = min(max(breadth - 1, 0), 5) * 4
+    risk_score = severity + breadth_bonus
+
+    if risk_score >= 90:
         risk_level = "CRITICAL"
-    elif risk_score >= 100:
+    elif risk_score >= 70:
         risk_level = "HIGH"
     elif risk_score >= 50:
         risk_level = "MEDIUM"

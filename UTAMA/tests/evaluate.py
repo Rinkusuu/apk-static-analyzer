@@ -231,18 +231,16 @@ def print_comparison(report: dict) -> None:
         return
     base = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
+    # Hanya metrik yang definisinya sama lintas versi yang layak dibandingkan
+    # langsung. Precision dan recall memenuhi syarat itu. Skor risiko TIDAK,
+    # sebab skalanya berubah saat model skoring diperbarui (lama: tak terbatas;
+    # baru: terikat 0-120), sehingga ditampilkan terpisah tanpa selisih.
     baris = [
         ("True Positive", base["true_positive"], report["true_positive"], "{:d}"),
         ("False Negative", base["false_negative"], report["false_negative"], "{:d}"),
         ("False Positive", base["false_positive"], report["false_positive"], "{:d}"),
         ("Precision", base["precision"], report["precision"], "{:.2%}"),
         ("Recall", base["recall"], report["recall"], "{:.2%}"),
-        (
-            "Skor risiko",
-            base["risk"]["total_risk_score"],
-            report["risk"]["total_risk_score"],
-            "{:d}",
-        ),
     ]
 
     print("Perbandingan terhadap kondisi awal proyek:")
@@ -255,6 +253,12 @@ def print_comparison(report: dict) -> None:
         else:
             delta = f"{kini - awal:+d}"
         print(f"    {nama:<18}{fmt.format(awal):>12}{fmt.format(kini):>12}{delta:>14}")
+
+    skor_awal = base["risk"]["total_risk_score"]
+    skor_kini = report["risk"]["total_risk_score"]
+    print(f"\n    Skor risiko (skala berbeda, tidak dibandingkan langsung):")
+    print(f"        kondisi awal (model lama, tak terbatas) : {skor_awal}")
+    print(f"        sekarang    (model baru, terikat 0-120) : {skor_kini}")
     print()
 
 

@@ -8,7 +8,7 @@
   "false_positive_by_detector": {},
   "false_positive_examples": [],
   "risk": {
-    "total_risk_score": 1485,
+    "total_risk_score": 240,
     "risk_from_false_positives": 0,
     "false_positive_share": 0.0,
     "per_artifact": [
@@ -20,12 +20,12 @@
       {
         "file": "assets/index.android.bundle",
         "risk_level": "CRITICAL",
-        "risk_score": 665
+        "risk_score": 120
       },
       {
         "file": "classes.dex",
         "risk_level": "CRITICAL",
-        "risk_score": 820
+        "risk_score": 120
       }
     ]
   },
