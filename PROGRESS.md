@@ -41,14 +41,14 @@ Aturan lengkap ada di `README.md`.
 - [x] Berkas relevan disalin dari `ThreatHunter-Toolkit/APK_Analyzer/` ke `KP/FINAL/`
 - [x] Berkas utama diganti nama: `indexandbundle_grep.py` → `apk_analyzer.py`
 - [x] Dibangun APK sampel sintetis ber-ground-truth (`UTAMA/tests/make_sample_apk.py`)
-- [x] Dibangun harness pengukuran precision & recall (`UTAMA/tests/test_analyzer.py`)
+- [x] Dibangun harness pengukuran precision & recall (`UTAMA/tests/evaluate.py`)
 - [x] Baseline "sebelum perbaikan" terkunci di `UTAMA/tests/baseline_report.json`
 - [x] Dokumentasi alur kerja lengkap (`UTAMA/docs/ALUR_KERJA.md`, 10 bagian)
 - [x] Direktori dipisah `UTAMA/` vs `PENDUKUNG/` agar tidak salah kumpul
 
 ## Angka Baseline (sebelum perbaikan apa pun)
 
-Sumber: `UTAMA/tests/baseline_report.json`. Reproduksi: `cd UTAMA && python3 tests/test_analyzer.py`
+Sumber: `UTAMA/tests/baseline_report.json`. Reproduksi: `cd UTAMA && python3 tests/evaluate.py`
 
 | Metrik | Nilai |
 |---|---|
@@ -89,7 +89,7 @@ Daftar keterbatasan lengkap (7 poin) ada di `UTAMA/docs/ALUR_KERJA.md` bagian 9.
 
 - Setiap perbaikan dijelaskan **sebelum** dan **sesudah**, dengan angka dari
   harness pengujian. Tiap perbaikan setara satu subbab laporan.
-- **Pemilik proyek yang menjalankan sendiri** `python3 tests/test_analyzer.py`
+- **Pemilik proyek yang menjalankan sendiri** `python3 tests/evaluate.py`
   setelah tiap perubahan — ini bagian dari proses memahami, bukan formalitas.
 - Jangan refactor besar-besaran sebelum alur kodenya dipahami.
 - Jangan pernah menyalin isi `PENDUKUNG/` ke dalam `UTAMA/`.

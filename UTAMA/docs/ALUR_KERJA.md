@@ -325,7 +325,7 @@ cocok dengan pola analyzer. Tidak ada kredensial sungguhan yang digunakan.
 
 ### 8.2 Metrik
 
-`test_analyzer.py` menjalankan pipeline analyzer yang sesungguhnya terhadap
+`evaluate.py` menjalankan pipeline analyzer yang sesungguhnya terhadap
 sampel, lalu membandingkan hasilnya dengan ground truth:
 
 - **True Positive (TP)** — rahasia tertanam yang berhasil ditemukan.

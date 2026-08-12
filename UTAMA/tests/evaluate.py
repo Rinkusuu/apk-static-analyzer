@@ -15,7 +15,7 @@ angka pembanding "sebelum perbaikan".
 
 Jalankan:
     python3 tests/make_sample_apk.py     # sekali, untuk membuat sampel
-    python3 tests/test_analyzer.py
+    python3 tests/evaluate.py
 """
 
 import json

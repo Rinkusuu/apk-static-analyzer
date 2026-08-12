@@ -23,7 +23,7 @@ UTAMA/
 │   └── ALUR_KERJA.md               dokumentasi alur kerja, bahan laporan
 └── tests/
     ├── make_sample_apk.py          generator APK sampel + ground truth
-    ├── test_analyzer.py            harness pengukuran precision & recall
+    ├── evaluate.py                 harness pengukuran precision & recall
     ├── sample.apk                  APK sintetis (dibangkitkan)
     ├── expected.json               ground truth (dibangkitkan)
     └── baseline_report.json        hasil pengukuran (dibangkitkan)
@@ -47,14 +47,14 @@ python3 apk_analyzer.py /path/ke/target.apk
 python3 tests/make_sample_apk.py
 
 # 3. Mengukur precision & recall terhadap sampel
-python3 tests/test_analyzer.py
+python3 tests/evaluate.py
 ```
 
 Perintah nomor 3 adalah yang menghasilkan angka pengujian pada laporan.
 
 ### Catatan struktur
 
-`tests/test_analyzer.py` mengimpor `apk_analyzer.py` dari direktori induknya.
+`tests/evaluate.py` mengimpor `apk_analyzer.py` dari direktori induknya.
 Keduanya harus tetap bersebelahan di dalam `UTAMA/`; bila salah satu dipindah,
 pengujian tidak akan berjalan.
 

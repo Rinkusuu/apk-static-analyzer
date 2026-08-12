@@ -29,7 +29,7 @@ prompt tidak menghasilkan perubahan nyata, tidak perlu ada yang dicatat.
 - Proyek ini akan dipresentasikan dan dipertanggungjawabkan pemiliknya. Prioritas
   utama adalah **pemiliknya paham**, bukan kodenya cepat selesai.
 - Jelaskan setiap perubahan sebelum dan sesudah, sertai angka dari
-  `tests/test_analyzer.py`. Setiap perbaikan setara satu subbab laporan.
+  `tests/evaluate.py`. Setiap perbaikan setara satu subbab laporan.
 - Biarkan pemilik proyek yang menjalankan sendiri pengujiannya.
 - Jangan melakukan refactor besar tanpa diminta.
 
@@ -39,7 +39,7 @@ prompt tidak menghasilkan perubahan nyata, tidak perlu ada yang dicatat.
 cd UTAMA
 python3 apk_analyzer.py <target.apk>     # analisis APK
 python3 tests/make_sample_apk.py         # bangkitkan sampel + ground truth
-python3 tests/test_analyzer.py           # ukur precision & recall
+python3 tests/evaluate.py                # ukur precision & recall
 ```
 
 Hanya memakai pustaka standar Python. Tidak ada dependensi.
