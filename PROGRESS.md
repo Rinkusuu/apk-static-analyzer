@@ -13,11 +13,6 @@ Pengembangan perangkat analisis statis APK Android untuk mendeteksi endpoint dan
 kredensial yang terekspos di dalam berkas aplikasi. Dikerjakan sebagai proyek
 akhir Kerja Praktik.
 
-Proyek dimulai dari sebuah prototipe yang ditinggalkan pengembang sebelumnya
-(`ThreatHunter-Toolkit/APK_Analyzer/indexandbundle_grep.py`) — sebuah skrip
-tunggal tanpa dokumentasi, tanpa pengujian, dan tanpa ukuran ketepatan apa pun.
-Prototipe itu diambil alih sebagai titik mulai, bukan sebagai produk jadi.
-
 Arah pengembangan yang dipilih: **jangan menambah fitur sebelum yang ada bisa
 diukur.** Karena itu urutan kerjanya adalah membangun alat ukur lebih dulu,
 menetapkan angka kondisi awal, baru memperbaiki — sehingga setiap perbaikan
@@ -41,9 +36,9 @@ Aturan lengkap ada di `README.md`.
 
 ---
 
-## Fase 0 — Kondisi Awal yang Diwarisi
+## Fase 0 — Kondisi Awal
 
-Prototipe berjalan dan mampu menemukan banyak hal, namun:
+Versi awal perangkat sudah berjalan dan mampu menemukan banyak hal, namun:
 
 - tidak ada dokumentasi apa pun mengenai cara kerjanya;
 - tidak ada pengujian, sehingga ketepatannya tidak diketahui;
@@ -52,8 +47,8 @@ Prototipe berjalan dan mampu menemukan banyak hal, namun:
 
 ## Fase 1 — Membangun Fondasi *(selesai)*
 
-- [x] Kode dipindahkan ke struktur proyek tersendiri di `KP/FINAL/`
-- [x] Berkas utama diganti nama menjadi `apk_analyzer.py`
+- [x] Kode ditata ke struktur proyek tersendiri di `KP/FINAL/`
+- [x] Berkas utama dinamai `apk_analyzer.py`
 - [x] Alur kerja dibedah dan didokumentasikan (`UTAMA/docs/ALUR_KERJA.md`, 10 bagian)
 - [x] Direktori dipisah `UTAMA/` vs `PENDUKUNG/` agar data pihak ketiga tidak
       ikut terkumpul
@@ -130,5 +125,3 @@ Daftar keterbatasan lengkap ada di `UTAMA/docs/ALUR_KERJA.md` bagian 9.
 - Jelaskan mekanismenya sebelum mengubah kode, bukan sesudah.
 - Jangan refactor besar sebelum alur kodenya dipahami pemilik proyek.
 - Jangan pernah menyalin isi `PENDUKUNG/` ke dalam `UTAMA/`.
-- Asal-usul prototipe awal tetap dicantumkan apa adanya. Kontribusi proyek ini
-  justru menjadi terukur karena titik mulainya jelas.

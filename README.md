@@ -4,9 +4,8 @@ Perangkat analisis statis untuk berkas APK Android. Membuka APK, menelusuri
 artefak kode di dalamnya, lalu mendeteksi endpoint dan kredensial yang terekspos
 — tanpa dekompilasi dan tanpa menjalankan aplikasinya.
 
-Dikembangkan sebagai proyek akhir Kerja Praktik, bertolak dari prototipe yang
-ditinggalkan pengembang sebelumnya. Riwayat pengembangan dan angka pengukuran
-tercatat di `PROGRESS.md`.
+Dikembangkan sebagai proyek akhir Kerja Praktik. Riwayat pengembangan dan angka
+pengukuran tercatat di `PROGRESS.md`.
 
 **Ketepatan saat ini:** precision 100%, recall 100% terhadap sampel
 ber-ground-truth berisi 20 kredensial dan 41 umpan.

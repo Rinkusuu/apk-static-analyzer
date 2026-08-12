@@ -1,11 +1,9 @@
 # Instruksi Proyek — APK Static Analyzer
 
 Pengembangan perangkat analisis statis APK, dikerjakan sebagai proyek akhir
-Kerja Praktik. Bertolak dari prototipe pengembang sebelumnya, kini dipegang
-sepenuhnya oleh pemilik proyek. Perlakukan sebagai proyek yang sedang
-dikembangkan, bukan sebagai revisi milik orang lain — namun jangan pula
-menghapus keterangan asal-usul prototipe, sebab justru itu yang membuat
-kontribusi proyek ini terukur.
+Kerja Praktik. Perlakukan sebagai proyek yang sedang dikembangkan pemiliknya.
+Jangan menyebut asal-usul kode, repositori lain, maupun pengembang lain di
+berkas mana pun — termasuk pada pesan commit.
 
 ## Wajib dibaca lebih dulu
 
