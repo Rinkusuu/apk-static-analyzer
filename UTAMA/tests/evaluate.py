@@ -42,7 +42,7 @@ REPORT_PATH = BASE_DIR / "hasil_terkini.json"
 # Kategori hasil yang diperlakukan sebagai "klaim kredensial" oleh analyzer.
 # Hanya kategori inilah yang dihitung false positive-nya, sebab kategori lain
 # (urls, keywords, dsb.) memang bersifat inventarisasi, bukan tuduhan.
-CREDENTIAL_CATEGORIES = ("api_keys_and_tokens", "db_connections")
+CREDENTIAL_CATEGORIES = ("api_keys_and_tokens", "db_connections", "decoded_secrets")
 
 
 # ==============================================================================

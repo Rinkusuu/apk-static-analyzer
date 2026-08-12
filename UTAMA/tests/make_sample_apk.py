@@ -14,6 +14,7 @@ Semua kredensial di bawah ini adalah nilai palsu yang sengaja dibuat agar cocok
 dengan pola regex analyzer. Tidak ada satu pun yang merupakan kredensial asli.
 """
 
+import base64
 import json
 import random
 import zipfile
@@ -84,8 +85,21 @@ DECOY_UUIDS = [_fake_uuid() for _ in range(40)]
 # bukan kredensial sungguhan.
 DECOY_LOW_ENTROPY = "aaaaaaaaaaaaaaaaaaaa"
 
+# Potongan identifier JavaScript ter-minify yang diawali "key-". Bentuknya cocok
+# dengan pola Mailgun yang longgar (key- + 32 alnum), padahal jelas bukan kunci.
+# Meniru kelas false positive yang muncul pada bundle React Native ter-minify.
+DECOY_MAILGUN_LOOKALIKE = "key-shARparsePathAndParamsFromExpoGoX"
+
+# Data biner (PNG) yang dienkode Base64. Byte awalnya adalah magic PNG dan
+# memuat substring "token" agar lolos uji indikator sensitif model lama, meski
+# sesungguhnya hanyalah aset gambar — meniru kelas false positive aset tertanam.
+_png_blob = b"\x89PNG\r\n\x1a\n" + b"tokenIHDR" + bytes(range(200))
+DECOY_BASE64_PNG = base64.b64encode(_png_blob).decode("ascii")
+
 DECOYS = [(u, "UUID biasa (request-id), bukan kredensial") for u in DECOY_UUIDS]
 DECOYS.append((DECOY_LOW_ENTROPY, "placeholder entropi rendah pada key 'api_key'"))
+DECOYS.append((DECOY_MAILGUN_LOOKALIKE, "identifier JS ter-minify, bukan kunci Mailgun"))
+DECOYS.append((DECOY_BASE64_PNG, "aset gambar PNG ter-enkode Base64, bukan rahasia"))
 
 
 # ==============================================================================
@@ -121,6 +135,7 @@ var __BUNDLE__=(function(){{
   var HEADERS = {{ "Authorization": "Bearer <redacted>", "X-API-Key": "" }};
   var STORE = {{ "@app:auth_token": null, "@app:user_profile": null }};
   var ENV = {{ base: "REACT_APP_API_BASE", flag: "EXPO_PUBLIC_DEBUG_MODE" }};
+  var NOISE = {{ minified: "{DECOY_MAILGUN_LOOKALIKE}", icon: "{DECOY_BASE64_PNG}" }};
   return {{ CONFIG: CONFIG, ROUTES: ROUTES, TRACE_IDS: TRACE_IDS }};
 }})();
 """.encode("utf-8")

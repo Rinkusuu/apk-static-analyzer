@@ -330,6 +330,16 @@
       "value": "aaaaaaaaaaaaaaaaaaaa",
       "reason": "placeholder entropi rendah pada key 'api_key'",
       "must_detect": false
+    },
+    {
+      "value": "key-shARparsePathAndParamsFromExpoGoX",
+      "reason": "identifier JS ter-minify, bukan kunci Mailgun",
+      "must_detect": false
+    },
+    {
+      "value": "iVBORw0KGgp0b2tlbklIRFIAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGxw==",
+      "reason": "aset gambar PNG ter-enkode Base64, bukan rahasia",
+      "must_detect": false
     }
   ]
 }

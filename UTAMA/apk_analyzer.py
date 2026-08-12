@@ -63,7 +63,7 @@ TOKEN_PATTERNS = {
     "Stripe Key": (rb"(?:pk|sk)_(?:live|test)_[0-9a-zA-Z]{24,}", 95),
     "Alibaba Cloud Key": (rb"LTAI[A-Za-z0-9]{20}", 90),
     "Twilio API Key": (rb"SK[0-9a-fA-F]{32}", 85),
-    "Mailgun API Key": (rb"key-[0-9a-zA-Z]{32}", 80),
+    "Mailgun API Key": (rb"key-[0-9a-f]{32}\b", 80),
     "SendGrid API Key": (rb"SG\.[A-Za-z0-9\-_]{22}\.[A-Za-z0-9\-_]{43}", 85),
     "Heroku API Key": (
         rb"(?i)heroku[a-z0-9_\-]{0,20}[\"']?\s*[:=]\s*[\"']?"
@@ -78,6 +78,21 @@ TOKEN_PATTERNS = {
 RISK_THRESHOLDS = ((90, "CRITICAL"), (70, "HIGH"), (50, "MEDIUM"))
 MAX_BASE64_DECODES = 50
 MAX_FILE_SIZE = 300 * 1024 * 1024
+
+# Magic byte awal berkas biner umum (gambar, arsip, executable). Dipakai untuk
+# menolak aset yang salah tuduh sebagai rahasia hasil dekode Base64.
+BINARY_MAGIC = (
+    b"\x89PNG\r\n\x1a\n",  # PNG
+    b"\xff\xd8\xff",        # JPEG
+    b"GIF87a", b"GIF89a",   # GIF
+    b"RIFF",                # WEBP / WAV / AVI
+    b"\x1f\x8b",            # gzip
+    b"PK\x03\x04",          # zip / jar / apk
+    b"BZh",                 # bzip2
+    b"%PDF",                # PDF
+    b"\x7fELF",             # ELF
+    b"OggS",                # OGG
+)
 
 
 def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
@@ -211,6 +226,10 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         except Exception:
             continue
         if len(decoded_bytes) < 8 or calculate_shannon_entropy(decoded_bytes) < 3.5:
+            continue
+        # Tolak aset biner (gambar, arsip): magic byte-nya menandai berkas, bukan
+        # rahasia. Tanpa ini, gambar tertanam kerap salah tuduh sebagai secret.
+        if decoded_bytes.startswith(BINARY_MAGIC):
             continue
         decoded_str = decoded_bytes.decode("utf-8", errors="ignore")
         if any(ind in decoded_str.lower() for ind in sensitive_indicators):

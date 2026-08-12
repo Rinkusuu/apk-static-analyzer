@@ -88,12 +88,46 @@ Versi awal perangkat sudah berjalan dan mampu menemukan banyak hal, namun:
       skor berubah total — angka skor lama dan baru TIDAK sebanding langsung,
       hanya precision/recall yang tetap sebanding.
 
-Fase 3 selesai. Precision 100%, recall 100%. Tiga uji hijau: evaluate,
-test_zip_slip, test_scoring.
+## Fase 4 — Validasi terhadap APK Nyata *(berjalan)*
 
-**Pelajaran metodologis dari langkah Zip Slip:** uji yang membantah hipotesis
-sama berharganya dengan yang membenarkan. Klaim keamanan diuji, bukan dipercaya
-begitu saja — dan dokumentasi bagian 9.3 yang semula keliru telah dikoreksi.
+Metode *differential analysis*: jalankan script pada APK produksi nyata, lalu
+bandingkan dengan analisis manual atas artefaknya untuk menemukan kesenjangan
+yang tak terlihat dari sampel sintetis. (Bukti konkret berisi endpoint pihak
+ketiga disimpan di `PENDUKUNG/temuan_differential.md`, tidak di-push.)
+
+Kesenjangan yang ditemukan pada bundle Hermes React Native:
+
+- [x] **False positive Mailgun.** Pola `key-[0-9a-zA-Z]{32}` menangkap identifier
+      JS ter-minify. Diperketat ke `key-[0-9a-f]{32}\b` (format hex asli Mailgun).
+- [x] **False positive Base64 pada aset biner.** Gambar tertanam (PNG/WEBP) lolos
+      sebagai "decoded secret". Ditambahkan penolakan berbasis magic byte
+      (`BINARY_MAGIC`). `decoded_secrets` kini dihitung sebagai kategori tuduhan
+      di harness.
+- [ ] **Tidak sadar Hermes string-pool packing.** URL/endpoint tertangkap dengan
+      sampah string berikutnya menempel; ekstraksi endpoint bersih gagal. **Celah
+      terbesar berikutnya.**
+- [ ] **Tidak memisahkan API milik aplikasi vs URL dokumentasi library.**
+- [ ] **storage_keys menangkap nama paket npm.**
+
+Bukti perbaikan pada APK nyata (bundle `index.android.bundle`):
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| risk_level | CRITICAL (palsu) | LOW |
+| kredensial (FP Mailgun) | 1 | 0 |
+| decoded_secrets (FP gambar) | 9 | 0 |
+
+Total 10 false positive di APK nyata dihapus. Catatan: LOW kini akurat untuk
+kebocoran *kredensial*, sekaligus menandai bahwa tool belum menilai eksposur
+permukaan endpoint — pekerjaan Hermes berikutnya.
+
+Empat uji hijau: evaluate, test_zip_slip, test_scoring, dan sampel kini memuat
+pemicu FP Mailgun + Base64 sebagai regression.
+
+**Pelajaran metodologis:** sampel sintetis membuktikan tool bekerja pada yang
+sudah ditanam; validasi APK nyata mengungkap yang tak terpikirkan pembuat pola.
+Keduanya diperlukan. Temuan nyata di-*port* balik menjadi umpan sintetis agar
+terkunci sebagai regression.
 
 ---
 
