@@ -15,3 +15,8 @@ PENDUKUNG/
 
 # Keluaran hasil analisis APK nyata (dibuat otomatis oleh apk_analyzer.py)
 *_analysis_*/
+
+# Pengaman: APK nyata tidak boleh pernah ter-track, di mana pun ia diletakkan.
+# Pengecualian hanya untuk sample.apk sintetis yang menjadi bagian uji.
+*.apk
+!UTAMA/tests/sample.apk
