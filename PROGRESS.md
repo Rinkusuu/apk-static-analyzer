@@ -103,11 +103,17 @@ Kesenjangan yang ditemukan pada bundle Hermes React Native:
       sebagai "decoded secret". Ditambahkan penolakan berbasis magic byte
       (`BINARY_MAGIC`). `decoded_secrets` kini dihitung sebagai kategori tuduhan
       di harness.
-- [ ] **Tidak sadar Hermes string-pool packing.** URL/endpoint tertangkap dengan
-      sampah string berikutnya menempel; ekstraksi endpoint bersih gagal. **Celah
-      terbesar berikutnya.**
+- [x] **Kesadaran Hermes bytecode.** Bundle RN modern adalah Hermes bytecode;
+      string disimpan berjejalan tanpa pemisah, sehingga regex byte mentah
+      menangkap endpoint + ekor string tetangga. Ditulis `extract_hermes_strings()`
+      yang membaca tabel string Hermes (offset+panjang) dan memotong tiap string
+      pada batas aslinya. Diverifikasi `tests/test_hermes.py` (berkas Hermes
+      minimal sintetis) dan pada APK nyata: 20 endpoint backend kini terekstrak
+      utuh (auth OTP, penagihan, dll.), URL bersih 60→84. Blok `api_paths` juga
+      diperluas untuk path standalone.
 - [ ] **Tidak memisahkan API milik aplikasi vs URL dokumentasi library.**
 - [ ] **storage_keys menangkap nama paket npm.**
+- [ ] **Belum menilai eksposur permukaan endpoint** (skor masih fokus kredensial).
 
 Bukti perbaikan pada APK nyata (bundle `index.android.bundle`):
 
@@ -121,8 +127,8 @@ Total 10 false positive di APK nyata dihapus. Catatan: LOW kini akurat untuk
 kebocoran *kredensial*, sekaligus menandai bahwa tool belum menilai eksposur
 permukaan endpoint — pekerjaan Hermes berikutnya.
 
-Empat uji hijau: evaluate, test_zip_slip, test_scoring, dan sampel kini memuat
-pemicu FP Mailgun + Base64 sebagai regression.
+Lima uji hijau: evaluate, test_zip_slip, test_scoring, test_hermes, dan sampel
+kini memuat pemicu FP Mailgun + Base64 sebagai regression.
 
 **Pelajaran metodologis:** sampel sintetis membuktikan tool bekerja pada yang
 sudah ditanam; validasi APK nyata mengungkap yang tak terpikirkan pembuat pola.

@@ -6,9 +6,10 @@ import math
 import re
 import traceback
 import zipfile
+import struct
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def calculate_shannon_entropy(data: bytes) -> float:
@@ -30,6 +31,61 @@ def extract_apk(apk_path: Path, output_dir: Path) -> None:
                     f"Entri APK menulis di luar direktori tujuan (Zip Slip): {member!r}"
                 )
         apk.extractall(output_dir)
+
+
+HERMES_MAGIC = 0x1F1903C103BC1FC6
+HERMES_HEADER_SIZE = 128
+
+
+def extract_hermes_strings(raw: bytes) -> Optional[List[str]]:
+    """Ekstrak string bersih dari bundle Hermes bytecode.
+
+    Bundle React Native modern adalah Hermes bytecode: seluruh string disimpan
+    berjejalan pada satu blok tanpa pemisah. Regex byte mentah karena itu
+    menangkap string dengan ekor string berikutnya menempel. Fungsi ini membaca
+    tabel string Hermes (pasangan offset+panjang) untuk memotong tiap string
+    tepat pada batas aslinya.
+
+    Mengembalikan daftar string bila berkas adalah Hermes yang dapat diurai,
+    atau None agar pemanggil kembali ke pemindaian byte mentah biasa.
+    """
+    if len(raw) < HERMES_HEADER_SIZE or struct.unpack_from("<Q", raw, 0)[0] != HERMES_MAGIC:
+        return None
+    try:
+        u32 = lambda o: struct.unpack_from("<I", raw, o)[0]
+        function_count, string_kind_count, identifier_count = u32(40), u32(44), u32(48)
+        string_count, overflow_count, storage_size = u32(52), u32(56), u32(60)
+
+        align4 = lambda x: (x + 3) & ~3
+        off = align4(HERMES_HEADER_SIZE + function_count * 16)
+        off = align4(off + string_kind_count * 4)
+        off = align4(off + identifier_count * 4)
+        small_tbl = off
+        off = align4(off + string_count * 4)
+        overflow_tbl = off
+        off = align4(off + overflow_count * 8)
+        storage = off
+
+        if storage + storage_size > len(raw):
+            return None
+
+        strings = []
+        for i in range(string_count):
+            entry = u32(small_tbl + i * 4)
+            is_utf16 = entry & 1
+            s_off = (entry >> 1) & 0x7FFFFF
+            s_len = (entry >> 24) & 0xFF
+            if s_len == 0xFF:
+                s_len = u32(overflow_tbl + s_off * 8 + 4)
+                s_off = u32(overflow_tbl + s_off * 8)
+            start = storage + s_off
+            if is_utf16:
+                strings.append(raw[start:start + s_len * 2].decode("utf-16-le", "ignore"))
+            else:
+                strings.append(raw[start:start + s_len].decode("utf-8", "ignore"))
+        return strings
+    except (struct.error, IndexError):
+        return None
 
 
 def find_artifacts(root_dir: Path) -> List[Path]:
@@ -102,6 +158,14 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
 
     raw_bytes = artifact_path.read_bytes()
 
+    # Bundle Hermes: ganti korpus dengan string bersih dari tabel string, dipisah
+    # newline agar regex tidak menyeberang batas antar-string. Bila bukan Hermes
+    # (atau gagal diurai), pemindaian tetap memakai byte mentah seperti biasa.
+    hermes_strings = extract_hermes_strings(raw_bytes)
+    is_hermes = hermes_strings is not None
+    if is_hermes:
+        raw_bytes = "\n".join(hermes_strings).encode("utf-8", "ignore")
+
     results: Dict[str, set] = {
         "urls": set(),
         "websockets": set(),
@@ -138,13 +202,15 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         if not ip_str.startswith(("127.", "0.0.0.0", "255.255.255.", "10.0.2.")):
             results["ip_addresses"].add(ip_str)
 
-    # C. API paths
+    # C. API paths. Batas kiri/kanan menerima tanda kutip ATAU batas string
+    # (awal/akhir baris) agar path standalone pada bundle Hermes ikut tertangkap,
+    # bukan hanya literal berkutip pada JS biasa.
     for path in re.findall(
-        rb"[\"'](/(?:api|apimobile|v[0-9]+|graphql|rest|auth|user|admin|wp-json|oauth|token|session|upload|download|payment|checkout)[a-zA-Z0-9._/\-]*)[\"']",
+        rb"(?:[\"']|^|\n)(/(?:api|apimobile|v[0-9]+|graphql|rest|auth|user|admin|wp-json|oauth|token|session|upload|download|payment|checkout)[a-zA-Z0-9._/\-]*)(?:[\"']|$|\n)",
         raw_bytes,
-        flags=re.IGNORECASE,
+        flags=re.IGNORECASE | re.MULTILINE,
     ):
-        results["api_paths"].add(path.decode("utf-8", errors="ignore"))
+        results["api_paths"].add(path.decode("utf-8", errors="ignore").rstrip("/"))
 
     # D. Action endpoints
     action_patterns = [
@@ -265,6 +331,7 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     return {
         "file": artifact_path.name,
         "size_kb": round(file_size / 1024, 2),
+        "is_hermes": is_hermes,
         "risk_level": risk_level,
         "risk_score": risk_score,
         "summary": {

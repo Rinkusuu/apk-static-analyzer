@@ -118,7 +118,7 @@ dengan kerangka kerja yang dipakai aplikasi target:
 
 | Kerangka Kerja | Berkas yang dicari | Alasan |
 |---|---|---|
-| React Native | `*.bundle`, `*.jsbundle` | Seluruh kode JavaScript dibundel apa adanya, sering nyaris tanpa obfuskasi |
+| React Native | `*.bundle`, `*.jsbundle` | Kode JavaScript dibundel; versi modern berupa Hermes bytecode (lihat bagian 8.6) |
 | Kotlin / Java | `*.dex` | Bytecode Dalvik; *string pool*-nya memuat literal dalam bentuk teks biasa |
 | Flutter | `libflutter.so`, `libapp.so`, `*_blob.bin`, `*.dart` | Kode Dart dikompilasi ke biner native, namun literal string tetap tersimpan |
 | Semua | `AndroidManifest.xml` | Memuat daftar permission dan komponen aplikasi |
@@ -440,6 +440,52 @@ Perilaku ini diverifikasi oleh `tests/test_scoring.py`:
 Sebagai konsekuensi, skala skor berubah total. Angka skor sebelum dan sesudah
 perbaikan ini **tidak dapat dibandingkan langsung**; hanya precision dan recall
 yang tetap sebanding lintas versi.
+
+### 8.6 Perbaikan: Kesadaran Hermes Bytecode
+
+Ditemukan lewat validasi terhadap APK produksi nyata. Aplikasi React Native
+modern tidak mengemas kode sebagai JavaScript teks, melainkan sebagai **Hermes
+bytecode** — berkas biner tempat seluruh string disimpan berjejalan pada satu
+blok penyimpanan tanpa pemisah antar-string:
+
+```
+...https://api.contoh.id/apimobile/auth/verify-otp/__setInternalHeightchevron...
+   └──────────── string 1 ────────────┘└─ string 2 ─┘└──── string 3 ─────┘
+```
+
+Pemindaian byte mentah tidak mengetahui batas antar-string, sehingga regex URL
+menangkap sebuah endpoint beserta ekor string berikutnya
+(`.../verify-otp/__setInternalHeight`). Endpoint asli ada, tetapi ternoda dan
+tidak dapat dipakai.
+
+Hermes menyimpan sebuah **tabel string** berisi pasangan (offset, panjang) untuk
+tiap string. Fungsi `extract_hermes_strings()` membaca header Hermes, menghitung
+letak tabel string dan blok penyimpanan, lalu memotong tiap string tepat pada
+batas aslinya. Bila artefak adalah bundle Hermes, korpus pemindaian diganti
+dengan string-string bersih ini (dipisah baris baru agar regex tidak menyeberang
+batas); bila bukan Hermes atau gagal diurai, pemindaian kembali ke byte mentah.
+
+Struktur berkas yang diurai (versi bytecode 96):
+
+| Bagian | Isi |
+|---|---|
+| Header (128 byte) | magic `0x1F1903C103BC1FC6`, versi, dan cacah tiap tabel |
+| Tabel string kecil | `stringCount` entri; tiap entri 32-bit mengemas offset (23 bit) + panjang (8 bit) |
+| Tabel string overflow | untuk string yang panjangnya melebihi 255 byte |
+| Blok penyimpanan | seluruh byte string, berjejalan |
+
+Hasil pada bundle `index.android.bundle` APK nyata:
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Endpoint `.../auth/verify-otp` | ternoda ekor string | terpotong bersih |
+| URL bersih ter-inventaris | 60 (banyak ternoda/blob sampah) | 84 (bersih) |
+| Permukaan API backend terlihat | terkubur | 20 endpoint utuh (auth OTP, penagihan, dll.) |
+
+Diverifikasi `tests/test_hermes.py`, yang membangun berkas Hermes minimal berisi
+string diketahui dan memastikan URL terekstrak tanpa tercampur string tetangga.
+Sebagai imbas, blok `api_paths` (C) juga diperluas agar menerima path standalone
+(berbatas awal/akhir baris), bukan hanya literal berkutip pada JS biasa.
 
 ---
 
