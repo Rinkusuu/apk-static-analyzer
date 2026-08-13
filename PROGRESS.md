@@ -115,7 +115,11 @@ Kesenjangan yang ditemukan pada bundle Hermes React Native:
       `app_endpoints`: URL pada host non-library dengan jalur ber-penanda API
       (`classify_app_endpoint` + `LIBRARY_HOSTS`). Pada APK nyata: dari 84 URL,
       18 diisolasi sebagai endpoint aplikasi. Diuji di `test_hermes.py`.
-- [ ] **storage_keys menangkap nama paket npm.**
+- [x] **Filter nama paket npm dari storage_keys.** Pola `@...` sempat menangkap
+      nama paket npm (`@react-navigation`, `@scope/pkg`) sebagai kunci
+      penyimpanan. Ditambah aturan buang bila mengandung `/` atau berbentuk
+      scope huruf-kecil (`NPM_SCOPE_RE`). Diuji di `test_scoring.py`; pada APK
+      nyata storage_keys 4 (semua npm) -> 0.
 - [ ] **Belum menilai eksposur permukaan endpoint** (skor masih fokus kredensial).
 
 ## Antarmuka

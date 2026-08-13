@@ -45,6 +45,8 @@ APP_ENDPOINT_PATH = re.compile(
     r"/(?:api|apimobile|v[0-9]+|graphql|oauth|rest|auth|mobile)(?:/|$)", re.IGNORECASE
 )
 
+NPM_SCOPE_RE = re.compile(r"@[a-z][a-z0-9-]*")
+
 TOKEN_PATTERNS = {
     "AWS Access Key": (rb"(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}", 100),
     "Google API Key": (rb"AIza[0-9A-Za-z\-_]{35}", 90),
@@ -261,7 +263,10 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
         results["env_variables"].add(env.decode("utf-8", errors="ignore"))
 
     for key in re.findall(rb"[\"'](@[a-zA-Z0-9_:/.\-]+)[\"']", raw_bytes):
-        results["storage_keys"].add(key.decode("utf-8", errors="ignore"))
+        key_str = key.decode("utf-8", errors="ignore")
+        if "/" in key_str or NPM_SCOPE_RE.fullmatch(key_str):
+            continue
+        results["storage_keys"].add(key_str)
     for key in re.findall(rb"[\"']((?:shared_preferences_|flutter\.secure_storage|AsyncStorage_)[a-zA-Z0-9_]+)[\"']", raw_bytes):
         results["storage_keys"].add(key.decode("utf-8", errors="ignore"))
 

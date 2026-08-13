@@ -99,6 +99,18 @@ def main() -> int:
     print(f"    artefak tanpa kredensial -> skor {bersih['risk_score']}, level {bersih['risk_level']}")
     cek("level LOW", bersih["risk_level"] == "LOW", bersih["risk_level"])
 
+    # ── storage_keys menyaring nama paket npm ──────────────────────────────
+    print("\n5. storage_keys: kunci penyimpanan asli disimpan, paket npm dibuang")
+    store = score(
+        b'"@app:auth_token" "@react-navigation" "@react-native-clipboard/clipboard"'
+    )
+    sk = store["storage_keys"]
+    print(f"    storage_keys -> {sk}")
+    cek("kunci penyimpanan asli tersimpan", "@app:auth_token" in sk, "@app:auth_token")
+    cek("paket npm bare dibuang", "@react-navigation" not in sk, "@react-navigation")
+    cek("paket npm ber-scope dibuang", "@react-native-clipboard/clipboard" not in sk,
+        "@react-native-clipboard/clipboard")
+
     print()
     if lulus:
         print("[+] LULUS: model skoring berperilaku sesuai rancangan.")

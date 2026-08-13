@@ -112,6 +112,15 @@ APP_ENDPOINT_PATH = re.compile(
     r"/(?:api|apimobile|v[0-9]+|graphql|oauth|rest|auth|mobile)(?:/|$)", re.IGNORECASE
 )
 
+# Pola nama SCOPE paket npm huruf-kecil (mis. "@react-navigation", "@babel").
+# ISTILAH — npm scope : awalan "@..." pada nama paket JavaScript. Pola kunci
+#   penyimpanan React Native (AsyncStorage) juga diawali "@" (mis.
+#   "@app:auth_token"), sehingga nama paket npm sempat salah tuduh sebagai kunci
+#   penyimpanan. Kunci penyimpanan asli biasanya memakai ":" atau huruf besar;
+#   paket npm berupa scope huruf-kecil-strip atau memuat "/". NPM_SCOPE_RE dan
+#   uji "/" dipakai untuk membuang paket npm dari storage_keys.
+NPM_SCOPE_RE = re.compile(r"@[a-z][a-z0-9-]*")
+
 # --- Detektor kredensial ---------------------------------------------------
 # Kamus: nama detektor -> (pola, bobot risiko 50-100).
 # ISTILAH — Bobot : mencerminkan tingkat kepastian + dampak. Kunci privat dan
@@ -441,9 +450,13 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     for env in re.findall(rb"\b(?:REACT_APP_|EXPO_PUBLIC_|NEXT_PUBLIC_|APP_|FLUTTER_|VITE_|NUXT_)[A-Z0-9_]{3,}\b", raw_bytes):
         results["env_variables"].add(env.decode("utf-8", errors="ignore"))
 
-    # --- H. Kunci penyimpanan lokal ---------------------------------------
+    # --- H. Kunci penyimpanan lokal (buang nama paket npm) ----------------
     for key in re.findall(rb"[\"'](@[a-zA-Z0-9_:/.\-]+)[\"']", raw_bytes):
-        results["storage_keys"].add(key.decode("utf-8", errors="ignore"))
+        key_str = key.decode("utf-8", errors="ignore")
+        # Lewati bila berbentuk paket npm ("@scope/pkg" atau "@scope" huruf kecil).
+        if "/" in key_str or NPM_SCOPE_RE.fullmatch(key_str):
+            continue
+        results["storage_keys"].add(key_str)
     for key in re.findall(rb"[\"']((?:shared_preferences_|flutter\.secure_storage|AsyncStorage_)[a-zA-Z0-9_]+)[\"']", raw_bytes):
         results["storage_keys"].add(key.decode("utf-8", errors="ignore"))
 
