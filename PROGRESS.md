@@ -118,13 +118,21 @@ Kesenjangan yang ditemukan pada bundle Hermes React Native:
 - [ ] **storage_keys menangkap nama paket npm.**
 - [ ] **Belum menilai eksposur permukaan endpoint** (skor masih fokus kredensial).
 
+## Antarmuka
+
+Dua mode pemakaian:
+- **Langsung**: `python3 apk_analyzer.py <target.apk>` — sekali jalan, tulis JSON.
+- **Bermenu**: `python3 apk_cli.py` — CLI interaktif berheader hias + warna
+  (analisis, riwayat hasil, jalankan pengujian, tentang). Hanya lapisan
+  tampilan; analisis tetap memakai fungsi publik `apk_analyzer`.
+
 ## Konvensi Kode
 
-Kode produksi `UTAMA/apk_analyzer.py` **bersih total tanpa komentar/docstring**.
-Penjelasan lengkap + istilah ada di salinan beranotasi
-`UTAMA/docs/apk_analyzer_beranotasi.py` (perilakunya diverifikasi identik dengan
-kode produksi). Setiap perubahan kode: jaga produksi tetap bersih, lalu
-perbarui salinan beranotasi.
+Kode produksi (`UTAMA/apk_analyzer.py`, `UTAMA/apk_cli.py`) **bersih total tanpa
+komentar/docstring**. Penjelasan lengkap + istilah ada di salinan beranotasi
+`UTAMA/docs/apk_analyzer_beranotasi.py` dan `UTAMA/docs/apk_cli_beranotasi.py`
+(perilaku analyzer diverifikasi identik dengan produksi). Setiap perubahan kode:
+jaga produksi tetap bersih, lalu perbarui salinan beranotasi.
 
 Bukti perbaikan pada APK nyata (bundle `index.android.bundle`):
 

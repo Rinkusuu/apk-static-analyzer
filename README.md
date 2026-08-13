@@ -30,12 +30,18 @@ tambahkan apa pun dari luar folder tersebut.
 
 ```
 UTAMA/
-├── apk_analyzer.py                 program utama
+├── apk_analyzer.py                 mesin analisis (mode langsung)
+├── apk_cli.py                      antarmuka bermenu (mode interaktif)
 ├── docs/
-│   └── ALUR_KERJA.md               dokumentasi alur kerja, bahan laporan
+│   ├── ALUR_KERJA.md               dokumentasi alur kerja, bahan laporan
+│   ├── apk_analyzer_beranotasi.py  salinan beranotasi mesin analisis
+│   └── apk_cli_beranotasi.py       salinan beranotasi antarmuka
 └── tests/
     ├── make_sample_apk.py          generator APK sampel + ground truth
     ├── evaluate.py                 harness pengukuran precision & recall
+    ├── test_zip_slip.py            uji keamanan Zip Slip
+    ├── test_scoring.py             uji model skoring
+    ├── test_hermes.py              uji ekstraksi string Hermes
     ├── sample.apk                  APK sintetis (dibangkitkan)
     ├── expected.json               ground truth (dibangkitkan)
     ├── baseline_report.json        angka kondisi awal — dibekukan, jangan ditimpa
@@ -53,8 +59,11 @@ Hanya memakai pustaka standar Python. Tidak ada dependensi yang perlu dipasang.
 ```bash
 cd UTAMA
 
-# 1. Analisis sebuah APK
+# 1a. Analisis sebuah APK (mode langsung)
 python3 apk_analyzer.py /path/ke/target.apk
+
+# 1b. Antarmuka bermenu (mode interaktif)
+python3 apk_cli.py
 
 # 2. Membangkitkan ulang APK sampel dan ground truth (opsional)
 python3 tests/make_sample_apk.py
