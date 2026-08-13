@@ -112,7 +112,6 @@ def menu() -> str:
     print(f"  {BOLD}{TEAL}1{RESET}  Analisis sebuah APK")
     print(f"  {BOLD}{TEAL}2{RESET}  Riwayat hasil analisis")
     print(f"  {BOLD}{TEAL}3{RESET}  Jalankan pengujian")
-    print(f"  {BOLD}{TEAL}4{RESET}  Tentang perangkat")
     print(f"  {BOLD}{TEAL}0{RESET}  Keluar")
     print()
     return ask("Pilih menu: ")
@@ -148,13 +147,51 @@ def render_summary(final_result: dict, output_json: Path) -> None:
             print(f"  {DIM}  … dan {extra} lainnya (lihat berkas JSON){RESET}")
 
 
+def find_apk_candidates() -> list:
+    # Cari berkas .apk di beberapa folder relevan agar pengguna bisa memilih
+    # lewat nomor, tanpa mengetik path panjang. Termasuk PENDUKUNG/apk_input
+    # (tempat APK nyata diletakkan) yang berada di luar UTAMA.
+    dirs = [
+        Path.cwd(),
+        BASE_DIR,
+        BASE_DIR / "tests",
+        BASE_DIR.parent / "PENDUKUNG" / "apk_input",
+        Path.cwd() / "apk",
+    ]
+    found = []
+    for directory in dirs:
+        if directory.is_dir():
+            for apk in sorted(directory.glob("*.apk")):
+                resolved = apk.resolve()
+                if resolved not in found:
+                    found.append(resolved)
+    return found
+
+
 def action_analyze() -> None:
-    # Menu 1: minta path APK, orkestrasi pipeline apk_analyzer, tampilkan hasil.
+    # Menu 1: tampilkan daftar APK yang ditemukan (pilih nomor) atau ketik path,
+    # lalu orkestrasi pipeline apk_analyzer dan tampilkan hasil.
     rule("ANALISIS APK")
-    path = ask("Path berkas .apk: ").strip('"').strip("'")
-    if not path:
+    candidates = find_apk_candidates()
+    if candidates:
+        print(f"  {GREY}APK ditemukan:{RESET}")
+        for i, apk in enumerate(candidates, 1):
+            try:
+                shown = apk.relative_to(BASE_DIR.parent)
+            except ValueError:
+                shown = apk
+            size = apk.stat().st_size / (1024 * 1024)
+            print(f"  {BOLD}{TEAL}{i:>2}{RESET}  {shown}  {DIM}({size:.1f} MB){RESET}")
+        print()
+        answer = ask("Nomor, atau ketik path .apk lain: ").strip('"').strip("'")
+    else:
+        answer = ask("Path berkas .apk: ").strip('"').strip("'")
+    if not answer:
         return
-    apk_path = Path(path).expanduser().resolve()
+    if answer.isdigit() and 1 <= int(answer) <= len(candidates):
+        apk_path = candidates[int(answer) - 1]
+    else:
+        apk_path = Path(answer).expanduser().resolve()
     if not apk_path.is_file():
         print(f"  {RED}Berkas tidak ditemukan:{RESET} {apk_path}")
         pause()
@@ -233,24 +270,9 @@ def action_tests() -> None:
     pause()
 
 
-def action_about() -> None:
-    # Menu 4: penjelasan singkat perangkat.
-    rule("TENTANG")
-    print(f"  Perangkat analisis statis APK Android.")
-    print(f"  Membuka APK sebagai ZIP, memilih artefak kode, lalu memindai")
-    print(f"  URL, endpoint, dan kredensial — tanpa menjalankan aplikasi.")
-    print()
-    print(f"  {GREY}Kerangka   {RESET}React Native (Hermes) · Kotlin/Java · Flutter")
-    print(f"  {GREY}Skoring    {RESET}severity + breadth, level LOW → CRITICAL")
-    print(f"  {GREY}Ketergantungan{RESET} pustaka standar Python saja")
-    print()
-    print(f"  {DIM}Mode langsung: python3 apk_analyzer.py <target.apk>{RESET}")
-    pause()
-
-
 def main() -> None:
     # Perulangan utama: gambar banner + menu, jalankan aksi terpilih, ulangi.
-    actions = {"1": action_analyze, "2": action_history, "3": action_tests, "4": action_about}
+    actions = {"1": action_analyze, "2": action_history, "3": action_tests}
     while True:
         clear()
         banner()

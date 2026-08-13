@@ -123,8 +123,9 @@ Kesenjangan yang ditemukan pada bundle Hermes React Native:
 Dua mode pemakaian:
 - **Langsung**: `python3 apk_analyzer.py <target.apk>` — sekali jalan, tulis JSON.
 - **Bermenu**: `python3 apk_cli.py` — CLI interaktif berheader hias + warna
-  (analisis, riwayat hasil, jalankan pengujian, tentang). Hanya lapisan
-  tampilan; analisis tetap memakai fungsi publik `apk_analyzer`.
+  (analisis, riwayat hasil, jalankan pengujian). Menu analisis otomatis mencari
+  APK di folder relevan termasuk `PENDUKUNG/apk_input`, jadi cukup pilih nomor.
+  Hanya lapisan tampilan; analisis tetap memakai fungsi publik `apk_analyzer`.
 
 ## Konvensi Kode
 
