@@ -1,0 +1,17 @@
+# APK Static Analyzer — daftar dependency
+#
+# Perangkat ini SENGAJA tidak memakai pustaka pihak ketiga apa pun.
+# Seluruh kode hanya bergantung pada pustaka standar Python
+# (argparse, base64, datetime, json, math, re, struct, zipfile,
+#  collections, pathlib, typing, glob, os, subprocess, sys).
+#
+# Karena itu berkas ini tidak memuat paket untuk dipasang:
+#   pip install -r requirements.txt   -> tidak memasang apa pun (wajar).
+#
+# Prasyarat satu-satunya:
+#   Python 3.8 atau lebih baru.
+#
+# Alasan desain (dan dapat dipertanggungjawabkan saat sidang):
+#   - mudah dijalankan di mana saja tanpa proses instalasi;
+#   - seluruh logika transparan, tanpa "kotak hitam" pihak ketiga;
+#   - tidak ada risiko keamanan/versi dari dependency eksternal.
