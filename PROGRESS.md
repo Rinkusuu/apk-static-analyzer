@@ -130,6 +130,14 @@ permukaan endpoint — pekerjaan Hermes berikutnya.
 Lima uji hijau: evaluate, test_zip_slip, test_scoring, test_hermes, dan sampel
 kini memuat pemicu FP Mailgun + Base64 sebagai regression.
 
+## Laporan
+
+Laporan KP dikompilasi sebagai halaman web (Artifact privat), terstruktur bab
+I–VI dengan kedalaman naratif+teknis, nol data endpoint nyata:
+https://claude.ai/code/artifact/d9e8f932-3b73-4152-ad30-f80def3145ef
+Sumber materi: `UTAMA/docs/ALUR_KERJA.md` + berkas ini. Untuk memperbarui,
+republish path yang sama atau berikan URL di atas sebagai `url`.
+
 **Pelajaran metodologis:** sampel sintetis membuktikan tool bekerja pada yang
 sudah ditanam; validasi APK nyata mengungkap yang tak terpikirkan pembuat pola.
 Keduanya diperlukan. Temuan nyata di-*port* balik menjadi umpan sintetis agar
