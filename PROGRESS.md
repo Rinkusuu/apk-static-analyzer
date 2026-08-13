@@ -111,9 +111,20 @@ Kesenjangan yang ditemukan pada bundle Hermes React Native:
       minimal sintetis) dan pada APK nyata: 20 endpoint backend kini terekstrak
       utuh (auth OTP, penagihan, dll.), URL bersih 60→84. Blok `api_paths` juga
       diperluas untuk path standalone.
-- [ ] **Tidak memisahkan API milik aplikasi vs URL dokumentasi library.**
+- [x] **Pisahkan API aplikasi vs URL dokumentasi library.** Kategori baru
+      `app_endpoints`: URL pada host non-library dengan jalur ber-penanda API
+      (`classify_app_endpoint` + `LIBRARY_HOSTS`). Pada APK nyata: dari 84 URL,
+      18 diisolasi sebagai endpoint aplikasi. Diuji di `test_hermes.py`.
 - [ ] **storage_keys menangkap nama paket npm.**
 - [ ] **Belum menilai eksposur permukaan endpoint** (skor masih fokus kredensial).
+
+## Konvensi Kode
+
+Kode produksi `UTAMA/apk_analyzer.py` **bersih total tanpa komentar/docstring**.
+Penjelasan lengkap + istilah ada di salinan beranotasi
+`UTAMA/docs/apk_analyzer_beranotasi.py` (perilakunya diverifikasi identik dengan
+kode produksi). Setiap perubahan kode: jaga produksi tetap bersih, lalu
+perbarui salinan beranotasi.
 
 Bukti perbaikan pada APK nyata (bundle `index.android.bundle`):
 

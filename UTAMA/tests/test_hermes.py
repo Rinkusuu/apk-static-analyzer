@@ -34,6 +34,7 @@ STRINGS = [
     "wss://ws.example.com/live",
     "/apimobile/tagihan/checkout",
     "AKIAIOSFODNN7EXAMPLE",
+    "https://reactnavigation.org/docs/getting-started",
 ]
 
 
@@ -110,6 +111,12 @@ def main() -> int:
     cek("endpoint /apimobile terdeteksi", "/apimobile/tagihan/checkout" in result["api_paths"])
     cek("kredensial AWS tetap terdeteksi",
         any("AWS" in t for t in result["api_keys_and_tokens"]))
+
+    print("\n4. app_endpoints memisahkan API aplikasi dari URL dokumentasi library")
+    cek("endpoint aplikasi masuk app_endpoints",
+        "https://api.example.com/v1/login" in result["app_endpoints"])
+    cek("URL dokumentasi library dikecualikan",
+        "https://reactnavigation.org/docs/getting-started" not in result["app_endpoints"])
 
     print()
     if lulus:
