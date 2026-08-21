@@ -209,6 +209,15 @@ Kesenjangan yang ditemukan pada bundel Hermes MyErpskrip:
   hasil ekstraksi APK pihak ketiga di dalam `UTAMA/`, melanggar aturan direktori
   proyek). Berkas hasilnya, `reverse_results.json`, tetap utuh.
 
+**Pemindaian ulang verifikasi (21 Agustus 2026).** Sesudah seluruh perbaikan,
+`MyErpskrip.apk` dipindai ulang di direktori sementara untuk menetapkan angka
+resmi. Sebaran per artefak: bundel Hermes 84 URL / 18 endpoint / 1 WebSocket /
+24 kata kunci; `classes.dex` 19 URL, `classes3.dex` 28 URL, `classes4.dex`
+5 URL — ketiganya **0 endpoint aplikasi**; `AndroidManifest.xml` dan
+`classes2.dex` tanpa temuan. Total 136 URL, 18 endpoint, 14 variabel lingkungan,
+0 kredensial, seluruh artefak `LOW`. Angka inilah yang dipakai seluruh dokumen
+keluaran; keluaran pemindaiannya sendiri dihapus, tidak ditinggalkan di repo.
+
 ## Antarmuka
 
 Dua mode pemakaian:
@@ -253,7 +262,7 @@ laporan KP — memakai framing berbeda yang wajib dipatuhi:
 - Alasan keberadaan tiap fitur adalah **karakteristik artefak yang dihadapi**
   (bundel Hermes, kode ter-minify, aset gambar Base64, URL pustaka), bukan
   riwayat kekeliruan yang diperbaiki.
-- Angka yang dilaporkan hanya hasil pemindaian MyErpskrip: 84 URL, 18 endpoint
+- Angka yang dilaporkan hanya hasil pemindaian MyErpskrip: 136 URL, 18 endpoint
   aplikasi, 1 WebSocket, 0 kredensial keras, risiko LOW.
 
 ## Laporan
@@ -272,6 +281,12 @@ Berkas knowledge Project di `~/Downloads/files/` (`ALUR_KERJA.txt`,
 mentah dari berkas di repositori — perbarui salinannya setiap kali sumbernya
 berubah, jika tidak Project laporan akan memakai versi lama.
 
+`~/Downloads/files/REVISI.md` (21 Agustus 2026) memuat daftar angka laporan yang
+berubah beserta letaknya, uraian tiap perubahan perangkat, dan kalimat siap
+pakai yang sudah sesuai framing laporan. Berkas itu catatan kerja, bukan bagian
+laporan. Keempat salinan knowledge di atas sudah disegarkan pada tanggal yang
+sama.
+
 Laporan KP dikompilasi sebagai halaman web (Artifact privat), terstruktur bab
 I–VI dengan kedalaman naratif+teknis, nol data endpoint nyata:
 https://claude.ai/code/artifact/d9e8f932-3b73-4152-ad30-f80def3145ef
@@ -287,8 +302,9 @@ Tiap temuan itu kemudian dikunci sebagai uji regresi agar tidak dapat kambuh.
 
 ## Angka Pengukuran (MyErpskrip)
 
-Kondisi awal: pemindaian 31 Juli 2026. Kondisi akhir: pemindaian 13 Agustus 2026.
-Objek dan berkas APK sama persis; pembanding adalah hasil analisis manual.
+Kondisi awal: pemindaian 31 Juli 2026. Kondisi terkini: pemindaian ulang
+21 Agustus 2026 sesudah perbaikan batas untai `.dex`. Objek dan berkas APK sama
+persis; pembanding adalah hasil analisis manual.
 
 **Kategori tuduhan (false positive)**
 
@@ -306,7 +322,7 @@ kategori ini juga tidak memiliki false negative.
 
 | Metrik | Kondisi Awal | Sekarang |
 |---|---|---|
-| URL bersih ter-inventaris | 60 (banyak ternoda) | **84** |
+| URL bersih ter-inventaris | 60 (banyak ternoda) | **136** (84 bundel + 52 dex) |
 | Endpoint aplikasi terisolasi | 0 (kategori belum ada) | **18** |
 | Endpoint benar (TP) | 0 | **18** |
 | Salah tuduh (FP) | — | 0 |
