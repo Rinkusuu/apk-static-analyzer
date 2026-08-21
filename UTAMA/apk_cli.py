@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import apk_analyzer
 
@@ -55,11 +56,12 @@ def badge(level: str) -> str:
     return f"{color}{BOLD} {level:^8} {RESET}"
 
 
-def ask(prompt: str) -> str:
+def ask(prompt: str) -> Optional[str]:
     try:
         return input(f"{TEAL}▸{RESET} {prompt}").strip()
     except EOFError:
-        return "0"
+        print()
+        return None
 
 
 def pause() -> None:
@@ -69,7 +71,7 @@ def pause() -> None:
         pass
 
 
-def menu() -> str:
+def menu() -> Optional[str]:
     print()
     rule("MENU")
     print(f"  {BOLD}{TEAL}1{RESET}  Analisis sebuah APK")
@@ -97,20 +99,32 @@ def render_summary(final_result: dict, output_json: Path) -> None:
         print(f"  {short:<34}{badge(data['risk_level'])}"
               f"{s.get('total_app_endpoints', 0):>9}{s['total_tokens_found']:>7}")
 
-    with_endpoints = [
-        (name, data) for name, data in artifacts.items() if data.get("app_endpoints")
-    ]
+    scanned = [data for data in artifacts.values() if "error" not in data]
+    total_endpoints = sum(d["summary"].get("total_app_endpoints", 0) for d in scanned)
+    total_tokens = sum(d["summary"]["total_tokens_found"] for d in scanned)
+    print()
+    print(f"  {BOLD}Total{RESET}    : {total_endpoints} endpoint aplikasi"
+          f" · {total_tokens} kredensial")
+    print(f"  {DIM}Skor risiko menilai kebocoran kredensial; daftar endpoint"
+          f" bersifat inventaris{RESET}")
+    print(f"  {DIM}dan tidak menaikkan skor.{RESET}")
+
+    with_endpoints = sorted(
+        ((name, data) for name, data in artifacts.items() if data.get("app_endpoints")),
+        key=lambda item: len(item[1]["app_endpoints"]),
+        reverse=True,
+    )
     if with_endpoints:
-        name, data = max(with_endpoints, key=lambda item: len(item[1]["app_endpoints"]))
-        endpoints = data["app_endpoints"]
         print()
         rule("ENDPOINT APLIKASI")
-        print(f"  {DIM}dari {name}{RESET}")
-        for ep in endpoints[:8]:
-            print(f"  {TEAL}·{RESET} {ep}")
-        extra = len(endpoints) - 8
-        if extra > 0:
-            print(f"  {DIM}  … dan {extra} lainnya (lihat berkas JSON){RESET}")
+        for name, data in with_endpoints:
+            endpoints = data["app_endpoints"]
+            print(f"  {DIM}dari {name} ({len(endpoints)}){RESET}")
+            for ep in endpoints[:8]:
+                print(f"  {TEAL}·{RESET} {ep}")
+            extra = len(endpoints) - 8
+            if extra > 0:
+                print(f"  {DIM}  … dan {extra} lainnya (lihat berkas JSON){RESET}")
 
 
 def find_apk_candidates() -> list:
@@ -143,11 +157,12 @@ def action_analyze() -> None:
             size = apk.stat().st_size / (1024 * 1024)
             print(f"  {BOLD}{TEAL}{i:>2}{RESET}  {shown}  {DIM}({size:.1f} MB){RESET}")
         print()
-        answer = ask("Nomor, atau ketik path .apk lain: ").strip('"').strip("'")
+        answer = ask("Nomor, atau ketik path .apk lain: ")
     else:
-        answer = ask("Path berkas .apk: ").strip('"').strip("'")
+        answer = ask("Path berkas .apk: ")
     if not answer:
         return
+    answer = answer.strip('"').strip("'")
     if answer.isdigit() and 1 <= int(answer) <= len(candidates):
         apk_path = candidates[int(answer) - 1]
     else:
@@ -184,7 +199,7 @@ def action_history() -> None:
     for i, r in enumerate(reports[:20], 1):
         print(f"  {BOLD}{TEAL}{i:>2}{RESET}  {r}")
     choice = ask("Nomor untuk dibuka (Enter=batal): ")
-    if not choice.isdigit() or not (1 <= int(choice) <= len(reports)):
+    if not choice or not choice.isdigit() or not (1 <= int(choice) <= len(reports)):
         return
     path = Path(reports[int(choice) - 1])
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -214,7 +229,7 @@ def main() -> None:
         clear()
         banner()
         choice = menu()
-        if choice == "0":
+        if choice is None or choice == "0":
             print(f"{DIM}  Selesai.{RESET}")
             return
         action = actions.get(choice)

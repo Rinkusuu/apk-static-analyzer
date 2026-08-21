@@ -29,6 +29,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import apk_analyzer
 
@@ -90,12 +91,18 @@ def badge(level: str) -> str:
     return f"{color}{BOLD} {level:^8} {RESET}"
 
 
-def ask(prompt: str) -> str:
-    # Baca input; EOF (Ctrl-D atau pipa habis) diperlakukan sebagai "0" (keluar).
+def ask(prompt: str) -> Optional[str]:
+    # Baca input. EOF (Ctrl-D atau pipa habis) dikembalikan sebagai None, BUKAN
+    # sebagai "0". Dahulu EOF dipalsukan menjadi "0" agar menu utama langsung
+    # keluar, tetapi fungsi ini juga dipakai pada prompt lain — di prompt path
+    # APK, "0" bukan nomor yang sah sehingga dianggap nama berkas dan muncul
+    # pesan "Berkas tidak ditemukan: .../0". Dengan None, tiap pemanggil
+    # memutuskan sendiri arti "tidak ada masukan".
     try:
         return input(f"{TEAL}▸{RESET} {prompt}").strip()
     except EOFError:
-        return "0"
+        print()
+        return None
 
 
 def pause() -> None:
@@ -105,7 +112,7 @@ def pause() -> None:
         pass
 
 
-def menu() -> str:
+def menu() -> Optional[str]:
     # Tampilkan menu dan kembalikan pilihan pengguna.
     print()
     rule("MENU")
@@ -136,24 +143,41 @@ def render_summary(final_result: dict, output_json: Path) -> None:
         print(f"  {short:<34}{badge(data['risk_level'])}"
               f"{s.get('total_app_endpoints', 0):>9}{s['total_tokens_found']:>7}")
 
-    # Endpoint ditampilkan dari artefak yang memuatnya PALING BANYAK — bukan
-    # artefak pertama. Bila seluruh artefak berskor sama (misalnya semuanya
-    # LOW), urutan daftar tidak lagi menandakan artefak mana yang paling
-    # informatif, sehingga memilih yang pertama bisa menampilkan artefak kosong.
-    with_endpoints = [
-        (name, data) for name, data in artifacts.items() if data.get("app_endpoints")
-    ]
+    # Baris total menjawab pertanyaan yang tidak terjawab oleh tabel per
+    # artefak: berapa banyak endpoint dan kredensial pada SELURUH APK. Baris
+    # keterangan di bawahnya menjelaskan mengapa risiko bisa LOW meski daftar
+    # endpoint panjang — skor menilai kebocoran kredensial, sedangkan endpoint
+    # bersifat inventarisasi dan sengaja tidak menaikkan skor.
+    scanned = [data for data in artifacts.values() if "error" not in data]
+    total_endpoints = sum(d["summary"].get("total_app_endpoints", 0) for d in scanned)
+    total_tokens = sum(d["summary"]["total_tokens_found"] for d in scanned)
+    print()
+    print(f"  {BOLD}Total{RESET}    : {total_endpoints} endpoint aplikasi"
+          f" · {total_tokens} kredensial")
+    print(f"  {DIM}Skor risiko menilai kebocoran kredensial; daftar endpoint"
+          f" bersifat inventaris{RESET}")
+    print(f"  {DIM}dan tidak menaikkan skor.{RESET}")
+
+    # Seluruh artefak yang memuat endpoint ditampilkan, terbanyak lebih dulu —
+    # bukan hanya satu artefak teratas, agar tidak ada endpoint yang hanya
+    # terlihat di berkas JSON. Tiap artefak tetap dipangkas 8 baris agar layar
+    # tidak tenggelam.
+    with_endpoints = sorted(
+        ((name, data) for name, data in artifacts.items() if data.get("app_endpoints")),
+        key=lambda item: len(item[1]["app_endpoints"]),
+        reverse=True,
+    )
     if with_endpoints:
-        name, data = max(with_endpoints, key=lambda item: len(item[1]["app_endpoints"]))
-        endpoints = data["app_endpoints"]
         print()
         rule("ENDPOINT APLIKASI")
-        print(f"  {DIM}dari {name}{RESET}")
-        for ep in endpoints[:8]:
-            print(f"  {TEAL}·{RESET} {ep}")
-        extra = len(endpoints) - 8
-        if extra > 0:
-            print(f"  {DIM}  … dan {extra} lainnya (lihat berkas JSON){RESET}")
+        for name, data in with_endpoints:
+            endpoints = data["app_endpoints"]
+            print(f"  {DIM}dari {name} ({len(endpoints)}){RESET}")
+            for ep in endpoints[:8]:
+                print(f"  {TEAL}·{RESET} {ep}")
+            extra = len(endpoints) - 8
+            if extra > 0:
+                print(f"  {DIM}  … dan {extra} lainnya (lihat berkas JSON){RESET}")
 
 
 def find_apk_candidates() -> list:
@@ -191,11 +215,15 @@ def action_analyze() -> None:
             size = apk.stat().st_size / (1024 * 1024)
             print(f"  {BOLD}{TEAL}{i:>2}{RESET}  {shown}  {DIM}({size:.1f} MB){RESET}")
         print()
-        answer = ask("Nomor, atau ketik path .apk lain: ").strip('"').strip("'")
+        answer = ask("Nomor, atau ketik path .apk lain: ")
     else:
-        answer = ask("Path berkas .apk: ").strip('"').strip("'")
+        answer = ask("Path berkas .apk: ")
+    # None (Ctrl-D) maupun string kosong (Enter) sama-sama berarti batal.
     if not answer:
         return
+    # Kutip dilepas SESUDAH pemeriksaan, sebab drag-and-drop terminal kerap
+    # menyertakan tanda kutip pada path.
+    answer = answer.strip('"').strip("'")
     if answer.isdigit() and 1 <= int(answer) <= len(candidates):
         apk_path = candidates[int(answer) - 1]
     else:
@@ -236,7 +264,7 @@ def action_history() -> None:
     for i, r in enumerate(reports[:20], 1):
         print(f"  {BOLD}{TEAL}{i:>2}{RESET}  {r}")
     choice = ask("Nomor untuk dibuka (Enter=batal): ")
-    if not choice.isdigit() or not (1 <= int(choice) <= len(reports)):
+    if not choice or not choice.isdigit() or not (1 <= int(choice) <= len(reports)):
         return
     path = Path(reports[int(choice) - 1])
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -268,7 +296,8 @@ def main() -> None:
         clear()
         banner()
         choice = menu()
-        if choice == "0":
+        # None = Ctrl-D, diperlakukan sama dengan memilih 0 (keluar).
+        if choice is None or choice == "0":
             print(f"{DIM}  Selesai.{RESET}")
             return
         action = actions.get(choice)

@@ -192,6 +192,22 @@ Kesenjangan yang ditemukan pada bundel Hermes MyErpskrip:
 - **Berkas rusak tidak lagi meninggalkan direktori hasil kosong.** Direktori
   keluaran baru dibuat setelah arsip terbukti valid dan seluruh entrinya lolos
   pemeriksaan Zip Slip.
+- **`ask()` tidak lagi memalsukan EOF menjadi `"0"`.** Nilai `"0"` benar untuk
+  menu utama (Keluar), tetapi fungsi yang sama dipakai pada prompt path APK —
+  di sana `"0"` bukan nomor sah sehingga dianggap nama berkas dan muncul
+  `Berkas tidak ditemukan: .../0` saat pengguna menekan Ctrl-D. Kini EOF
+  mengembalikan `None` dan tiap pemanggil memutuskan sendiri artinya.
+- **Seluruh artefak berendpoint ditampilkan**, terbanyak lebih dulu, bukan
+  hanya satu artefak teratas — tidak ada lagi endpoint yang hanya terlihat di
+  berkas JSON. Tiap artefak tetap dipangkas 8 baris.
+- **Baris total dan keterangan skor ditambahkan pada ringkasan layar**: jumlah
+  endpoint dan kredensial se-APK, disertai catatan bahwa skor risiko menilai
+  kebocoran kredensial sedangkan daftar endpoint bersifat inventarisasi. Ini
+  menjawab pertanyaan "mengapa LOW padahal endpoint-nya banyak" langsung di
+  layar, tanpa mengubah model skoring.
+- **`UTAMA/MyErpskrip_analysis_20260813_112841/extracted_files` dihapus** (60 MB
+  hasil ekstraksi APK pihak ketiga di dalam `UTAMA/`, melanggar aturan direktori
+  proyek). Berkas hasilnya, `reverse_results.json`, tetap utuh.
 
 ## Antarmuka
 
@@ -318,10 +334,11 @@ sehingga selisih antar-versi selalu dapat ditelusuri ulang.
    pada skor.
 2. **Pengurai AXML** untuk AndroidManifest.xml — manifest MyErpskrip berformat
    binary XML sehingga permission dan komponennya praktis tidak terbaca.
-3. **Membersihkan `extracted_files`** — tiap pemindaian meninggalkan ekstraksi
-   penuh APK (±60 MB) di dalam direktori hasil dan tidak pernah dihapus, dan
-   berisiko menyalin isi APK pihak ketiga ke dalam `UTAMA/` bila dijalankan
-   dari sana.
+3. **Membersihkan `extracted_files` secara otomatis** — tiap pemindaian masih
+   meninggalkan ekstraksi penuh APK (±60 MB) di dalam direktori hasil. Folder
+   lama di `UTAMA/` sudah dihapus manual, tetapi perangkatnya sendiri belum
+   membersihkan diri; menjalankan dari `UTAMA/` tetap berisiko menyalin isi APK
+   pihak ketiga ke sana.
 4. Efisiensi memori dan kinerja blok Base64.
 5. Pemisahan modul dan laporan berformat Markdown/HTML — **paling akhir**.
 
