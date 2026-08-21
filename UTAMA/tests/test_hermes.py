@@ -6,6 +6,8 @@ memastikan:
   1. extract_hermes_strings() memotong tiap string tepat pada batasnya.
   2. analyze_artifact() mengekstrak URL secara BERSIH dari bundle Hermes —
      tidak tercampur string tetangga yang berjejalan di sebelahnya.
+  3. pada artefak biner non-Hermes (.dex), URL terpotong pada byte NUL yang
+     memisahkan antar-string, sehingga tidak menyambung jadi satu blob.
 
 Kasus uji dirancang meniru masalah nyata: pada Hermes, string disimpan
 berjejalan tanpa pemisah, sehingga pemindaian byte mentah akan menangkap
@@ -36,6 +38,18 @@ STRINGS = [
     "AKIAIOSFODNN7EXAMPLE",
     "https://reactnavigation.org/docs/getting-started",
 ]
+
+
+# Potongan menyerupai tabel string .dex: string berjejalan, dipisah byte NUL,
+# dan tiap string didahului byte panjang (ULEB128). Pemindaian byte mentah
+# tanpa pengecualian karakter kontrol akan menyambung semuanya jadi satu blob.
+DEX_LIKE_BLOB = (
+    b"\x005https://apibackend.example.id/apimobile/tagihan/list/"
+    b"\x00\x10http://%s/status"
+    b"\x00(https://www.googleapis.com/auth/userinfo.email"
+    b"\x00:http://xmlpull.org/v1/doc/features.html#process-namespaces"
+    b"\x00\x08httpBody\x00"
+)
 
 
 def build_min_hermes(strings) -> bytes:
@@ -117,6 +131,23 @@ def main() -> int:
         "https://api.example.com/v1/login" in result["app_endpoints"])
     cek("URL dokumentasi library dikecualikan",
         "https://reactnavigation.org/docs/getting-started" not in result["app_endpoints"])
+
+    print("\n5. artefak biner non-Hermes (.dex): string dipotong pada byte NUL")
+    dex_like = DEX_LIKE_BLOB
+    dex_result = analyze_bytes(dex_like)
+    cek("bukan Hermes", not dex_result["is_hermes"])
+    cek("URL backend terpotong bersih",
+        "https://apibackend.example.id/apimobile/tagihan/list/" in dex_result["urls"],
+        str(dex_result["urls"]))
+    cek("tidak ada URL yang menelan string tetangga",
+        not any("\x00" in u for u in dex_result["urls"]), str(dex_result["urls"]))
+    cek("hanya endpoint backend yang masuk app_endpoints",
+        dex_result["app_endpoints"] == ["https://apibackend.example.id/apimobile/tagihan/list/"],
+        str(dex_result["app_endpoints"]))
+    cek("URL ber-templat host (%s) bukan endpoint aplikasi",
+        not any("%s" in u for u in dex_result["app_endpoints"]))
+    cek("URL layanan/dokumentasi pihak ketiga bukan endpoint aplikasi",
+        not any("googleapis.com" in u or "xmlpull.org" in u for u in dex_result["app_endpoints"]))
 
     print()
     if lulus:

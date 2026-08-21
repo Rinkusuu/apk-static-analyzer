@@ -27,23 +27,23 @@ Target: bisa menjawab ≥ 16 dari 20 dengan yakin sebelum sidang.
 - C. Agar satu mesin pola yang sama bisa menangani berkas teks maupun biner
 - D. Agar hasilnya terenkripsi
 
-### 4. "Recall 100%" pada perangkat ini berarti…
-- A. Semua temuan yang dilaporkan benar
-- B. Tidak ada kredensial tertanam yang lolos dari deteksi
-- C. Perangkat berjalan tanpa error
-- D. Skor risiko selalu CRITICAL
+### 4. Hasil pemindaian MyErpskrip menunjukkan risiko `LOW`. Artinya…
+- A. Aplikasi sudah pasti aman sepenuhnya
+- B. Tidak ditemukan kredensial keras yang tertanam; skor memang menilai kebocoran kredensial
+- C. Perangkat gagal membaca artefaknya
+- D. Aplikasi tidak memakai jaringan
 
-### 5. "Precision 33%" berarti…
-- A. Hanya sepertiga ancaman yang tertangkap
-- B. Dari semua alarm, hanya sepertiga yang benar-benar sahih
-- C. Perangkat hanya bekerja 33% dari waktu
-- D. Sepertiga berkas gagal dibaca
+### 5. Meski risikonya `LOW`, temuan yang tetap perlu disorot pada MyErpskrip adalah…
+- A. Ukuran APK yang besar
+- B. Permukaan antarmuka peladen terbaca sepenuhnya — 18 endpoint aplikasi dan 1 WebSocket
+- C. Jumlah berkas dex yang banyak
+- D. Versi Android yang didukung
 
-### 6. Penyebab precision awal yang rendah (33%) adalah…
-- A. Semua detektor bermasalah
-- B. Recall yang buruk
-- C. Satu detektor (Heroku) yang polanya hanyalah pola UUID biasa
-- D. APK yang terlalu besar
+### 6. Mengapa alamat endpoint yang terbaca itu tetap penting dilaporkan?
+- A. Karena aplikasi seharusnya menyembunyikan alamatnya
+- B. Karena keamanan tidak boleh bertumpu pada anggapan alamatnya tidak diketahui orang
+- C. Karena alamat itu bisa dihapus dari aplikasi
+- D. Karena jumlahnya banyak
 
 ### 7. Entropi Shannon dipakai untuk…
 - A. Mengukur ukuran berkas
@@ -81,7 +81,7 @@ Target: bisa menjawab ≥ 16 dari 20 dengan yakin sebelum sidang.
 - C. Hasil yang benar
 - D. Duplikat temuan
 
-### 13. Mengapa false positive tinggi berbahaya, meski recall sempurna?
+### 13. Mengapa false positive yang banyak berbahaya, meski tak ada ancaman yang lolos?
 - A. Membuat perangkat lambat
 - B. Membuat analis mengabaikan alarm (alert fatigue), sehingga ancaman nyata bisa terlewat
 - C. Menghabiskan memori
@@ -93,11 +93,11 @@ Target: bisa menjawab ≥ 16 dari 20 dengan yakin sebelum sidang.
 - C. `urls` hanya untuk Flutter
 - D. `app_endpoints` adalah URL yang terenkripsi
 
-### 15. Hasil pengujian hipotesis Zip Slip adalah…
-- A. Terbukti rentan, lalu ditambal
-- B. Terbantah — pustaka Python sudah aman — namun tetap ditambahkan pengaman eksplisit
-- C. Tidak diuji
-- D. Menyebabkan perangkat crash
+### 15. Penanganan Zip Slip pada fungsi ekstraksi adalah…
+- A. Membiarkannya, karena pustaka Python dianggap sudah aman
+- B. Memeriksa jalur tiap entri secara eksplisit dan menolak arsip yang menulis di luar direktori tujuan
+- C. Mengenkripsi hasil ekstraksi
+- D. Melewati berkas berukuran besar
 
 ### 16. Kategori seperti URL dan permission bersifat "inventarisasi", artinya…
 - A. Menaikkan skor risiko
@@ -117,15 +117,15 @@ Target: bisa menjawab ≥ 16 dari 20 dengan yakin sebelum sidang.
 - C. Tidak bisa membuka ZIP
 - D. Selalu salah mendeteksi
 
-### 19. Inti "metodologi ukur-lalu-perbaiki" adalah…
-- A. Memperbaiki dulu, mengukur belakangan
-- B. Mengukur kondisi awal, memperbaiki, lalu mengukur lagi untuk membuktikan
-- C. Tidak perlu mengukur asal kode jalan
-- D. Mengukur sekali saja
+### 19. Pola `key-[0-9a-f]{32}` dipilih, bukan `key-[0-9a-zA-Z]{32}`, karena…
+- A. Lebih pendek ditulis
+- B. Mengikuti format heksadesimal yang sesungguhnya, agar identifier JavaScript ter-minify tidak ikut tertangkap
+- C. Huruf besar tidak didukung Python
+- D. Agar pemindaian lebih cepat
 
-### 20. Fungsi "regression test" (mis. pemicu FP Mailgun di sampel) adalah…
+### 20. Fungsi uji regresi pada folder `tests/` adalah…
 - A. Mempercepat perangkat
-- B. Memastikan cacat yang sudah diperbaiki tidak muncul lagi di kemudian hari
+- B. Memastikan fungsi kunci tetap berperilaku sesuai rancangan saat kode berubah
 - C. Menambah fitur baru
 - D. Mengurangi ukuran kode
 
@@ -136,9 +136,12 @@ Target: bisa menjawab ≥ 16 dari 20 dengan yakin sebelum sidang.
 1. **B** — Statis = tanpa menjalankan. (Bukan C: perangkat TIDAK mendekompilasi.)
 2. **C** — APK = arsip ZIP; itu sebabnya cukup modul `zipfile`.
 3. **C** — Byte membuat satu mesin pola menangani teks (.bundle) & biner (.dex/.so).
-4. **B** — Recall = kelengkapan; 100% = nol false negative.
-5. **B** — Precision = keterpercayaan tiap alarm; 33% = 2 dari 3 palsu.
-6. **C** — Seluruh 40 FP berasal dari detektor Heroku (pola UUID). 18 lain bersih.
+4. **B** — `LOW` = tidak ada kredensial keras. Bukan A: skor tidak menilai
+   seluruh aspek keamanan aplikasi.
+5. **B** — 84 URL, 18 endpoint aplikasi, 1 WebSocket terbaca dari berkas yang
+   didistribusikan, tanpa dekompilasi.
+6. **B** — Alamat endpoint memang harus tertulis agar dapat dihubungi; karena
+   itu tiap endpoint wajib punya pengamanan sendiri di sisi peladen.
 7. **B** — Acak → entropi tinggi (kredensial); berulang → rendah (placeholder).
 8. **B** — String berjejalan tanpa pemisah → regex menangkap ekor string tetangga.
 9. **B** — Baca tabel string Hermes (offset+panjang), potong di batas asli.
@@ -147,12 +150,14 @@ Target: bisa menjawab ≥ 16 dari 20 dengan yakin sebelum sidang.
 12. **B** — False negative = ancaman yang lolos.
 13. **B** — Alert fatigue: analis berhenti percaya alarm → ancaman nyata terlewat.
 14. **B** — `app_endpoints` menyaring host library & mensyaratkan jalur API.
-15. **B** — Dugaan terbantah oleh uji; pengaman eksplisit tetap ditambah (defense-in-depth).
+15. **B** — Jaminan keamanan dibuat tersurat di kode sendiri, tidak dititipkan
+    pada perilaku internal pustaka.
 16. **B** — Inventarisasi memperkaya laporan tetapi bukan tuduhan → tak menaikkan skor.
 17. **B** — Mudah dijalankan, transparan, tanpa "kotak hitam" pihak ketiga.
 18. **B** — Endpoint yang baru terbentuk saat runtime tak terlihat oleh analisis statis.
-19. **B** — Ukur → perbaiki → ukur lagi; selisih angka = bukti.
-20. **B** — Regression menjaga cacat lama tidak kambuh.
+19. **B** — Format asli Mailgun heksadesimal; pola longgar akan menangkap
+    identifier JavaScript ter-minify.
+20. **B** — Uji regresi menjaga perilaku fungsi kunci tetap sesuai rancangan.
 
 **Skor:**
 - 16–20 benar: sangat siap. Fokus latih menjelaskan lisan.

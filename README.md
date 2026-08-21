@@ -7,8 +7,13 @@ artefak kode di dalamnya, lalu mendeteksi endpoint dan kredensial yang terekspos
 Dikembangkan sebagai proyek akhir Kerja Praktik. Riwayat pengembangan dan angka
 pengukuran tercatat di `PROGRESS.md`.
 
-**Ketepatan saat ini:** precision 100%, recall 100% terhadap sampel
-ber-ground-truth berisi 20 kredensial dan 41 umpan.
+**Penerapan:** perangkat ini diterapkan untuk menganalisis aplikasi
+**MyErpskrip** (`com.qnn.myerpskrip`) — aplikasi Android berbasis React
+Native/Hermes berukuran 52,6 MB dengan enam artefak kode.
+
+**Hasil pemindaian:** 84 URL ter-inventaris, 18 endpoint aplikasi terpisah dari
+URL pustaka, 1 kanal WebSocket, tidak ada kredensial keras yang tertanam,
+tingkat risiko `LOW` pada seluruh artefak.
 
 ---
 
@@ -34,23 +39,23 @@ UTAMA/
 ├── apk_cli.py                      antarmuka bermenu (mode interaktif)
 ├── docs/
 │   ├── ALUR_KERJA.md               dokumentasi alur kerja, bahan laporan
+│   ├── RINGKASAN_MYERPSKRIP.md     profil objek uji (tanpa host/endpoint)
 │   ├── apk_analyzer_beranotasi.py  salinan beranotasi mesin analisis
 │   └── apk_cli_beranotasi.py       salinan beranotasi antarmuka
-└── tests/
-    ├── make_sample_apk.py          generator APK sampel + ground truth
-    ├── evaluate.py                 harness pengukuran precision & recall
-    ├── test_zip_slip.py            uji keamanan Zip Slip
+└── tests/                          uji regresi internal (alat bantu pengembangan)
+    ├── test_zip_slip.py            uji penolakan arsip jahat
     ├── test_scoring.py             uji model skoring
     ├── test_hermes.py              uji ekstraksi string Hermes
-    ├── sample.apk                  APK sintetis (dibangkitkan)
-    ├── expected.json               ground truth (dibangkitkan)
-    ├── baseline_report.json        angka kondisi awal — dibekukan, jangan ditimpa
-    └── hasil_terkini.json          hasil pengukuran terakhir (dibangkitkan)
+    └── (berkas kerja pengujian, dibangkitkan otomatis)
 ```
 
 Seluruh isinya aman dikumpulkan. Tidak ada data milik pihak lain, dan seluruh
-kredensial pada `sample.apk` adalah nilai palsu yang sengaja dibuat agar cocok
-dengan pola analyzer.
+nilai kredensial yang muncul di berkas uji adalah nilai palsu yang sengaja
+dibuat agar cocok dengan pola analyzer.
+
+Direktori `tests/` adalah **uji regresi internal**: alat bantu pengembangan yang
+menjaga agar perilaku fungsi-fungsi kunci tetap sesuai rancangan. Angka pada
+laporan seluruhnya berasal dari pemindaian MyErpskrip.
 
 ### Cara menjalankan
 
@@ -65,18 +70,18 @@ python3 apk_analyzer.py /path/ke/target.apk
 # 1b. Antarmuka bermenu (mode interaktif)
 python3 apk_cli.py
 
-# 2. Membangkitkan ulang APK sampel dan ground truth (opsional)
-python3 tests/make_sample_apk.py
-
-# 3. Mengukur precision & recall terhadap sampel
-python3 tests/evaluate.py
+# 2. Menjalankan uji regresi internal (opsional)
+python3 tests/test_hermes.py
+python3 tests/test_scoring.py
+python3 tests/test_zip_slip.py
 ```
 
-Perintah nomor 3 adalah yang menghasilkan angka pengujian pada laporan.
+Angka pada laporan dihasilkan oleh perintah nomor 1a terhadap `MyErpskrip.apk`;
+perintah nomor 2 hanya menjaga perilaku fungsi kunci tetap sesuai rancangan.
 
 ### Catatan struktur
 
-`tests/evaluate.py` mengimpor `apk_analyzer.py` dari direktori induknya.
+Berkas di dalam `tests/` mengimpor `apk_analyzer.py` dari direktori induknya.
 Keduanya harus tetap bersebelahan di dalam `UTAMA/`; bila salah satu dipindah,
 pengujian tidak akan berjalan.
 
@@ -95,16 +100,14 @@ Berkas ini adalah hasil analisis terhadap **APK produksi milik pihak ketiga**.
 Isinya mencakup 60 URL, di antaranya host backend internal
 (`apibackend.erpskrip.id`), beserta daftar endpoint aplikasi tersebut.
 
-**Alasan tidak dikumpulkan:** memuat data infrastruktur milik pihak lain yang
-tidak selayaknya ikut tersebar dalam berkas pengumpulan. Laporan tidak
-memerlukannya, sebab seluruh angka pengujian sudah bersumber dari sampel
-sintetis di `UTAMA/tests/`.
+**Alasan tidak dikumpulkan:** memuat host backend dan daftar endpoint internal
+secara konkret. Laporan tidak memerlukannya, sebab yang dikutip hanyalah angka
+agregat hasil pemindaian MyErpskrip — bukan isi endpointnya.
 
-Apabila hasil pada APK nyata tetap ingin dibahas di laporan, cukup kutip
-angka agregatnya saja — jumlah artefak, level risiko, jumlah temuan — tanpa
+Hasil pemindaian MyErpskrip tetap dibahas di laporan, namun cukup dengan angka
+agregatnya saja — jumlah artefak, level risiko, jumlah temuan — tanpa
 melampirkan URL, host, maupun berkas JSON-nya.
 
-Berkas ini tetap berguna sebagai bahan kerja: ia membuktikan bahwa kelemahan
-detektor `Heroku API Key` juga muncul pada APK nyata, bukan hanya pada sampel
-buatan. Dari 7 kredensial yang dilaporkan pada APK tersebut, seluruhnya
-merupakan false positive (6 Heroku, 1 Mailgun).
+Berkas ini adalah bahan kerja internal. Untuk laporan, yang dikutip cukup angka
+agregat hasil pemindaian — jumlah artefak, jumlah temuan per kategori, dan
+tingkat risiko.

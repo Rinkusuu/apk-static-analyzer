@@ -1,7 +1,8 @@
 # Dokumentasi Alur Kerja: APK Static Analyzer
 
 Dokumen ini menjelaskan cara kerja `apk_analyzer.py` secara menyeluruh, dari APK
-masuk sampai laporan JSON keluar. Ditulis sebagai bahan Bab Analisis & Perancangan
+masuk sampai laporan JSON keluar, ditutup dengan penerapannya terhadap aplikasi
+MyErpskrip. Ditulis sebagai bahan Bab Perancangan serta Bab Hasil dan Pembahasan
 laporan Kerja Praktik.
 
 Seluruh rujukan fungsi dan blok merujuk pada berkas `apk_analyzer.py` di
@@ -15,8 +16,8 @@ Tool ini melakukan **analisis statis** terhadap berkas APK Android. Ia membuka A
 sebagai arsip ZIP, mencari berkas-berkas yang memuat kode aplikasi, lalu membaca
 berkas tersebut sebagai **byte mentah** dan menyapunya dengan sekitar 25 pola
 *regular expression* untuk menemukan URL, endpoint API, kredensial, dan indikator
-sensitif lain. Setiap temuan berkategori kredensial menambah angka pada skor
-risiko, yang di akhir diterjemahkan menjadi level `LOW` sampai `CRITICAL`.
+sensitif lain. Temuan berkategori kredensial diringkas menjadi satu skor risiko
+terikat, yang di akhir diterjemahkan menjadi level `LOW` sampai `CRITICAL`.
 
 Analogi yang paling tepat: **tool ini adalah `grep` yang sangat terstruktur
 terhadap isi APK.**
@@ -163,6 +164,7 @@ kategori hasil. Seluruh hasil ditampung dalam `set` agar duplikat otomatis hilan
 | Blok | Kategori | Yang dicari |
 |---|---|---|
 | A | `urls`, `websockets` | `http://`, `https://`, `ws://`, `wss://` |
+| A′ | `app_endpoints` | URL milik aplikasi, disaring dari URL pustaka (bagian 5.6) |
 | B | `ip_addresses` | Alamat IPv4 |
 | C | `api_paths` | Path seperti `/api/...`, `/v1/...`, `/graphql` |
 | D | `action_endpoints` | Nama aksi (`getUser`, `checkoutOrder`) dan pasangan kunci-nilai `endpoint: "..."` |
@@ -210,9 +212,37 @@ Perhitungannya ada pada `calculate_shannon_entropy()`:
 H = -Σ p(x) · log₂ p(x)
 ```
 
-dengan `p(x)` adalah frekuensi kemunculan tiap byte. Pengujian membuktikan
-mekanisme ini bekerja: umpan berentropi rendah berhasil ditolak, sementara nilai
-acak sungguhan tetap terdeteksi.
+dengan `p(x)` adalah frekuensi kemunculan tiap byte. Penyaring ini bekerja dua
+arah: nilai berpola berulang seperti `AKIAAAAAAAAAAAAAAAAA` ditolak karena
+entropinya mendekati nol, sementara nilai acak sungguhan tetap lolos dan
+terdeteksi.
+
+**Deteksi berbasis bentuk vs berbasis konteks.** Sebagian besar detektor bekerja
+berbasis **bentuk**, sebab kredensial yang dicarinya memiliki awalan khas: `AKIA`
+pada AWS, `AIza` pada Google, `ghp_` pada GitHub. Bentuk semacam itu praktis
+tidak mungkin muncul secara kebetulan.
+
+Sebagian kredensial tidak seberuntung itu. Kunci API Heroku, misalnya, berbentuk
+UUID biasa tanpa awalan apa pun — bentuknya identik dengan *request-id* maupun
+*trace-id* yang lazim bertaburan di dalam aplikasi. Mendeteksinya berbasis bentuk
+berarti menuduh setiap UUID sebagai kredensial.
+
+Untuk kasus seperti ini dipakai deteksi berbasis **konteks**: nilai hanya
+dianggap kredensial apabila didahului label yang bermakna.
+
+| | Berbasis bentuk | Berbasis konteks |
+|---|---|---|
+| Dasar penerimaan | Rupa nilainya | Label yang mendahuluinya |
+| Contoh | `AKIA` + 16 karakter | UUID yang didahului kata "heroku" |
+| Dipakai bila | Pola khas dan tidak ambigu | Pola generik dan mudah tertukar |
+
+Prinsip yang sama menuntun dua keputusan lain. Pola Mailgun ditulis
+`key-[0-9a-f]{32}\b` mengikuti format heksadesimal yang sesungguhnya — bukan
+`[0-9a-zA-Z]{32}` yang lebih longgar — karena bentuk longgar itu akan menangkap
+identifier JavaScript hasil *minify*. Pada blok H, kandidat kunci penyimpanan
+yang mengandung `/` atau berbentuk *scope* npm huruf kecil dibuang lewat
+`NPM_SCOPE_RE`, sebab nama paket seperti `@react-navigation/native` berbentuk
+sama persis dengan kunci penyimpanan lokal.
 
 ### 5.4 Blok L — Lapisan Anti-Obfuskasi
 
@@ -223,33 +253,148 @@ melainkan dienkode Base64 lebih dahulu. Alurnya bertingkat:
 2. Coba dekode dengan `validate=True`; yang gagal diabaikan.
 3. Hitung entropi hasil dekode; bila di bawah 3.5, abaikan — kemungkinan besar
    hasil dekode yang kebetulan valid namun tidak bermakna.
-4. Periksa apakah hasil dekode memuat indikator sensitif (`http`, `token`,
+4. Tolak bila hasil dekode diawali *magic byte* berkas biner (`\x89PNG`,
+   `RIFF`/WEBP, JPEG, dan seterusnya) melalui daftar `BINARY_MAGIC`. Aplikasi
+   modern lazim menanamkan gambar sebagai untai Base64 di dalam kodenya, dan
+   potongan acak dari data gambar mudah kebetulan memuat indikator sensitif.
+5. Periksa apakah hasil dekode memuat indikator sensitif (`http`, `token`,
    `secret`, `jdbc`, dan sebagainya).
-5. Bila ya, simpan 200 karakter pertama dan tambahkan 70 ke skor risiko.
+6. Bila ya, simpan 200 karakter pertama dan tambahkan 70 ke skor risiko.
 
 Terdapat pembatas 50 hasil dekode per artefak demi menjaga kinerja.
+
+### 5.5 Penanganan Bundel Hermes
+
+Aplikasi React Native modern tidak mengemas kode sebagai JavaScript teks,
+melainkan sebagai **Hermes bytecode** — berkas biner tempat seluruh untai teks
+disimpan berjejalan pada satu blok penyimpanan tanpa pemisah antar-untai:
+
+```
+...https://api.contoh.id/apimobile/auth/verify-otp/__setInternalHeightchevron...
+   └──────────── untai 1 ─────────────┘└─ untai 2 ─┘└──── untai 3 ─────┘
+```
+
+Pemindaian byte mentah tidak mengetahui batas antar-untai, sehingga pola URL akan
+menangkap sebuah endpoint beserta ekor untai berikutnya
+(`.../verify-otp/__setInternalHeight`). Alamatnya ada, tetapi ternoda dan tidak
+dapat dipakai.
+
+Hermes sendiri menyimpan **tabel untai teks** berisi pasangan (offset, panjang)
+untuk tiap untai. Fungsi `extract_hermes_strings()` membaca header Hermes,
+menghitung letak tabel dan blok penyimpanan, lalu memotong tiap untai tepat pada
+batas aslinya. Bila artefak dikenali sebagai bundel Hermes, korpus pemindaian
+diganti dengan untai-untai bersih ini — dipisah baris baru agar pola tidak
+menyeberang batas. Bila bukan Hermes atau gagal diurai, pemindaian kembali ke
+byte mentah.
+
+Struktur berkas yang diurai (versi bytecode 96):
+
+| Bagian | Isi |
+|---|---|
+| Header (128 byte) | magic `0x1F1903C103BC1FC6`, versi, dan cacah tiap tabel |
+| Tabel untai kecil | `stringCount` entri; tiap entri 32-bit mengemas offset (23 bit) + panjang (8 bit) |
+| Tabel untai overflow | untuk untai yang panjangnya melebihi 255 byte |
+| Blok penyimpanan | seluruh byte untai, berjejalan |
+
+Karena untai kini terpotong bersih, blok `api_paths` (C) juga menerima jalur
+berdiri sendiri yang berbatas awal/akhir baris, bukan hanya literal berkutip
+seperti pada JavaScript biasa.
+
+Persoalan batas untai tidak hanya milik Hermes. Berkas `.dex` menyimpan *string
+pool*-nya dengan cara serupa — untai berjejalan, dipisah satu byte NUL, dan tiap
+untai didahului byte penanda panjang. Karena artefak `.dex` dipindai sebagai byte
+mentah, pola URL bisa menyeberangi pemisah itu dan menyambung belasan alamat
+menjadi satu untai panjang. Karena itu kelas karakter pada pola URL dan WebSocket
+mengecualikan seluruh byte kendali (`\x00`–`\x20` dan `\x7f`): sebuah URL yang sah
+memang tidak pernah boleh memuat karakter kendali (RFC 3986), sehingga byte NUL
+pemisah antar-untai sekaligus berfungsi sebagai penanda batas.
+
+### 5.6 Pemisahan Endpoint Aplikasi dari URL Pustaka
+
+Sebuah aplikasi modern membawa puluhan pustaka pihak ketiga, dan pustaka
+membawa serta tautan dokumentasinya sendiri. Akibatnya daftar URL mentah
+bercampur: alamat peladen milik aplikasi berbaur dengan `momentjs.com`,
+`reactnavigation.org`, atau `github.com` yang sekadar tertulis pada komentar
+kode pustaka.
+
+Karena itu disediakan kategori tersendiri, `app_endpoints`, yang diisi oleh
+`classify_app_endpoint()`. Sebuah URL masuk ke kategori ini bila memenuhi dua
+syarat sekaligus:
+
+1. **Host-nya bukan host pustaka** — diperiksa terhadap daftar `LIBRARY_HOSTS`.
+2. **Jalurnya memuat penanda API** — misalnya `/api`, `/v1`, `/auth`, atau
+   segmen serupa yang menandakan antarmuka program, bukan halaman dokumentasi.
+3. **Host-nya bukan templat** — alamat seperti `http://%s/status` milik
+   dev-server Metro baru diisi saat aplikasi berjalan, sehingga bukan alamat
+   peladen yang benar-benar terekspos di dalam berkas. `TEMPLATE_HOST_RE`
+   menolak host yang memuat `%s`, `{`, atau `$`.
+
+Daftar `LIBRARY_HOSTS` mencakup dua rumpun: host dokumentasi/spesifikasi
+(`momentjs.com`, `w3.org`, `xmlpull.org`) dan host layanan pihak ketiga yang
+dibawa SDK (`googleapis.com`, `gstatic.com`) — misalnya deretan URL cakupan
+OAuth Google Play Services yang tertanam pada berkas dex. Keduanya bukan
+permukaan antarmuka milik aplikasi.
+
+Kategori ini bersifat inventarisasi, bukan tuduhan: ia tidak menaikkan skor
+risiko, melainkan menjawab pertanyaan "permukaan antarmuka apa yang terbaca dari
+berkas yang didistribusikan".
 
 ---
 
 ## 6. Tahap 4 — Skoring dan Klasifikasi Risiko
 
-Skor risiko bersifat **akumulatif**: setiap temuan menambah bobotnya ke
-`risk_score`. Yang penting dicatat, dari 14 kategori hasil, **hanya tiga yang
-memengaruhi skor**:
+Temuan yang terkumpul perlu diringkas menjadi satu angka agar artefak dapat
+diurutkan menurut tingkat kegentingannya. Dari 15 kategori hasil, **hanya tiga
+yang memengaruhi skor**:
 
-| Sumber | Kontribusi |
+| Sumber | Bobot |
 |---|---|
-| Kredensial (blok E) | 50–100 per temuan, sesuai bobot detektor |
-| Connection string basis data (blok I) | 95 per temuan |
-| Rahasia hasil dekode Base64 (blok L) | 70 per temuan |
+| Kredensial (blok E) | 50–100, sesuai bobot detektor |
+| Connection string basis data (blok I) | 95 |
+| Rahasia hasil dekode Base64 (blok L) | 70 |
 
-Sebelas kategori sisanya — URL, path API, permission, kata kunci, dan seterusnya
-— murni bersifat **inventarisasi**. Kategori tersebut memperkaya laporan bagi
-analis, tetapi tidak dianggap sebagai tuduhan sehingga tidak menaikkan skor.
-Pemisahan ini merupakan keputusan desain yang tepat dan patut dipertahankan.
+Kategori sisanya — URL, endpoint aplikasi, jalur API, permission, kata kunci,
+dan seterusnya — murni bersifat **inventarisasi**. Kategori tersebut memperkaya
+laporan bagi analis, tetapi bukan tuduhan, sehingga tidak menaikkan skor.
 
-Cara skor tersebut dijadikan angka telah diperbarui dari model akumulatif
-menjadi model **severity + breadth** yang terikat; lihat bagian 8.5.
+### 6.1 Mengapa Bukan Model Akumulatif
+
+Cara paling sederhana menyusun skor adalah menjumlahkan bobot setiap kecocokan.
+Cara itu tidak dipakai, karena mengandung tiga cacat:
+
+1. **Duplikat menggelembungkan skor.** Satu token yang berulang lima puluh kali
+   di dalam berkas akan menaikkan skor lima puluh kali lipat, padahal secara
+   substansi ia hanyalah satu kebocoran.
+2. **Tidak ada batas atas.** Skor menumpuk tanpa plafon, sehingga artefak
+   berukuran besar hampir selalu mencapai level tertinggi semata karena
+   volumenya — bukan karena bahayanya.
+3. **Volume mengalahkan tingkat bahaya.** Empat blok sertifikat (bobot 50)
+   berjumlah 200, sedangkan satu kunci AWS (bobot 100) tetap 100. Padahal satu
+   kunci AWS yang bocor jauh lebih berbahaya daripada empat blok sertifikat yang
+   keberadaannya sering wajar.
+
+### 6.2 Model Severity + Breadth
+
+Skor karena itu disusun dari dua komponen, dihitung atas **temuan unik**:
+
+| Komponen | Makna | Perhitungan |
+|---|---|---|
+| *severity* | seberapa berbahaya temuan terparah | bobot tertinggi di antara temuan unik (0–100) |
+| *breadth* | seberapa beragam temuannya | `min(jumlah_temuan_unik − 1, 5) × 4`, maksimum +20 |
+
+Skor akhir adalah `severity + breadth`, terikat pada rentang 0–120. Karena
+dihitung dari temuan unik, duplikat tidak berpengaruh. Karena bonus keragaman
+dibatasi, volume tidak dapat mendominasi. Karena dasarnya temuan terparah, satu
+kunci berbahaya langsung mengangkat tingkat risiko tanpa perlu ditemani temuan
+lain.
+
+Perilaku model pada tiga skenario:
+
+| Skenario | Skor | Level |
+|---|---|---|
+| 1 kunci AWS | 100 | `CRITICAL` |
+| 4 blok sertifikat | 50 | `MEDIUM` |
+| 50 token identik | 100 (dihitung sekali) | `CRITICAL` |
 
 Klasifikasi akhir:
 
@@ -259,6 +404,11 @@ Klasifikasi akhir:
 | ≥ 70 | `HIGH` |
 | ≥ 50 | `MEDIUM` |
 | < 50 | `LOW` |
+
+Perlu ditegaskan satu hal dalam membaca level ini: yang dinilai adalah
+**kebocoran kredensial**. Artefak yang tidak memuat kredensial keras akan
+berlevel `LOW` sekalipun seluruh permukaan antarmukanya terbaca. Eksposur
+permukaan endpoint dilaporkan pada kategori `app_endpoints`, bukan pada skor.
 
 ---
 
@@ -278,19 +428,28 @@ Keluaran berupa satu berkas `reverse_results.json` di dalam direktori
     "assets/index.android.bundle": {
       "file": "index.android.bundle",
       "size_kb": 2048.5,
-      "risk_level": "CRITICAL",
-      "risk_score": 2930,
-      "summary": { "total_urls": 42, "total_tokens_found": 13, "...": 0 },
+      "risk_level": "LOW",
+      "risk_score": 0,
+      "summary": { "total_urls": 84, "total_app_endpoints": 18, "...": 0 },
       "urls": [ "..." ],
-      "api_keys_and_tokens": [ "[AWS Access Key] AKIA..." ],
+      "app_endpoints": [ "..." ],
+      "api_keys_and_tokens": [],
       "...": []
     }
   }
 }
 ```
 
-Artefak diurutkan menurun berdasarkan `risk_score` di `main()`, sehingga
-berkas paling berisiko selalu tampil paling atas.
+Artefak diurutkan menurun berdasarkan `risk_score`, sehingga berkas paling
+berisiko selalu tampil paling atas. Artefak yang dilewati karena melebihi batas
+300 MB tetap muncul dengan bentuk hasil yang sama, ditandai `risk_level`
+`SKIPPED` beserta keterangan pada kunci `error`.
+
+Seluruh langkah di atas — ekstraksi, pemilihan artefak, pemindaian, pengurutan,
+dan penulisan JSON — dikerjakan satu fungsi `analyze_apk()`. Mode baris perintah
+maupun antarmuka bermenu sama-sama memanggil fungsi tersebut, sehingga alur
+analisis hanya ditulis satu kali dan keduanya dijamin menghasilkan keluaran yang
+identik.
 
 Cara menjalankan:
 
@@ -303,265 +462,165 @@ dependensi apa pun.
 
 ---
 
-## 8. Metode Pengujian
+## 8. Penerapan terhadap MyErpskrip
 
-Untuk mengukur ketepatan tool secara objektif, dibangun sebuah APK sintetis yang
-isinya diketahui sepenuhnya. Berkas pengujian berada di direktori `tests/`.
+Perangkat yang telah dibangun diterapkan untuk menganalisis **MyErpskrip.apk**,
+aplikasi Android milik PT Queen Network Nusantara. Bagian ini memuat jalannya
+penerapan dan hasil yang diperoleh. Profil lengkap aplikasinya ada pada
+`RINGKASAN_MYERPSKRIP.md`.
 
-### 8.1 Rancangan
+### 8.1 Karakteristik Artefak yang Dihadapi
 
-`make_sample_apk.py` membangkitkan dua berkas sekaligus:
+Aplikasi ini dibangun dengan React Native/Expo, dan empat karakteristik
+artefaknya menentukan bagaimana perangkat harus bekerja:
 
-- `sample.apk` — arsip ZIP valid berisi `AndroidManifest.xml`, `classes.dex`, dan
-  `assets/index.android.bundle`, meniru struktur APK sungguhan.
-- `expected.json` — *ground truth*, yaitu daftar seluruh nilai yang ditanam.
-
-Karena keduanya dibangkitkan dari struktur data yang sama, ground truth tidak
-mungkin melenceng dari isi APK yang diuji.
-
-Isi sampel dirancang mengandung dua jenis nilai:
-
-| Jenis | Jumlah | Maksud |
+| Karakteristik artefak | Konsekuensi bila diabaikan | Ditangani oleh |
 |---|---|---|
-| Rahasia tertanam (`must_detect: true`) | 19 | Menguji **recall** — apakah ada yang terlewat |
-| Umpan (`must_detect: false`) | 41 | Menguji **precision** — apakah ada yang salah tuduh |
+| Kode dikemas sebagai bundel Hermes; untai teks berjejalan tanpa pemisah | Alamat terekstrak bersambung dengan ekor untai tetangga | `extract_hermes_strings()` — bagian 5.5 |
+| Kode JavaScript ter-*minify*; identifier acak menyerupai bentuk kunci API | Identifier biasa tertuduh sebagai kredensial | Deteksi berbasis konteks + pola ketat — bagian 5.3 |
+| Aset gambar tertanam sebagai untai Base64 | Data gambar tertuduh sebagai rahasia terenkode | Penolakan `BINARY_MAGIC` — bagian 5.4 |
+| Puluhan pustaka pihak ketiga membawa tautan dokumentasinya | Alamat milik aplikasi tenggelam di antara URL pustaka | `classify_app_endpoint()` — bagian 5.6 |
 
-Umpan terdiri atas 40 UUID biasa — nilai yang di aplikasi nyata lazim muncul
-sebagai *request-id* atau *trace-id* dan sama sekali bukan kredensial — ditambah
-satu placeholder berentropi rendah.
+Keempatnya adalah ciri umum aplikasi React Native modern, sehingga penanganan
+yang dirancang untuk MyErpskrip berlaku pula bagi aplikasi sejenis.
 
-Seluruh kredensial pada sampel adalah nilai palsu yang sengaja dibentuk agar
-cocok dengan pola analyzer. Tidak ada kredensial sungguhan yang digunakan.
+### 8.2 Jalannya Analisis
 
-### 8.2 Metrik
-
-`evaluate.py` menjalankan pipeline analyzer yang sesungguhnya terhadap
-sampel, lalu membandingkan hasilnya dengan ground truth:
-
-- **True Positive (TP)** — rahasia tertanam yang berhasil ditemukan.
-- **False Negative (FN)** — rahasia tertanam yang terlewat.
-- **False Positive (FP)** — nilai yang dilaporkan sebagai kredensial padahal bukan.
-- **Precision** = TP / (TP + FP) — seberapa dapat dipercaya setiap temuan.
-- **Recall** = TP / (TP + FN) — seberapa lengkap penemuannya.
-
-Penghitungan FP hanya diterapkan pada kategori yang bersifat tuduhan
-(`api_keys_and_tokens` dan `db_connections`), tidak pada kategori inventarisasi.
-
-### 8.3 Hasil Pengukuran
-
-| Metrik | Kondisi Awal | Sekarang | Perubahan |
-|---|---|---|---|
-| True Positive | 20 | 20 | tetap |
-| False Negative | 0 | 0 | tetap |
-| False Positive | 40 | **0** | −40 |
-| **Precision** | **33.33%** | **100.00%** | +66.67 poin |
-| **Recall** | **100.00%** | **100.00%** | tetap |
-
-Skor risiko tidak dimasukkan ke tabel perbandingan karena skalanya berubah pada
-langkah 8.5 (model lama tak terbatas; model baru terikat 0–120), sehingga
-angkanya tidak sebanding langsung. Hanya precision dan recall yang definisinya
-sama lintas versi dan layak dibandingkan.
-
-Analisis atas kondisi awal:
-
-1. **Recall sempurna sejak awal.** Seluruh 20 kredensial tertanam berhasil
-   ditemukan, mencakup kunci AWS, Google, GitHub, GitLab, Stripe, Slack,
-   Telegram, Alibaba, Twilio, SendGrid, Heroku, token JWT, blok kunci privat,
-   serta dua connection string. Kemampuan deteksi dasarnya memang kuat.
-
-2. **Precision rendah, dan penyebabnya tunggal.** Seluruh 40 false positive
-   berasal dari satu detektor saja, yaitu `Heroku API Key`. Delapan belas
-   detektor lainnya tidak menghasilkan satu pun kesalahan.
-
-3. **Skor risiko terdistorsi.** Dari total skor 3885, sebanyak 2400 (62%)
-   disumbang oleh false positive tersebut, sehingga level `CRITICAL` yang
-   dilaporkan sebagian besar bukan berasal dari temuan yang sahih.
-
-### 8.4 Perbaikan: Deteksi Berbasis Konteks
-
-Kunci API Heroku berbentuk UUID biasa dan **tidak memiliki awalan khas** seperti
-`AKIA` pada AWS, `AIza` pada Google, atau `ghp_` pada GitHub. Akibatnya, kunci
-Heroku sungguhan dan sekadar *request-id* maupun *trace-id* memiliki bentuk yang
-identik dan mustahil dibedakan berdasarkan pola semata.
-
-Pendekatan deteksi karena itu diubah dari **berbasis bentuk** menjadi **berbasis
-konteks**: sebuah UUID hanya dianggap kredensial apabila didahului label yang
-menyebut "heroku".
-
-| | Pendekatan lama | Pendekatan baru |
-|---|---|---|
-| Dasar deteksi | Bentuk (*pattern matching*) | Konteks (*contextual matching*) |
-| Cakupan | Seluruh UUID | Hanya UUID berlabel heroku |
-
-Detektor **tidak dihapus**, sebab menghapusnya berarti menghilangkan kemampuan
-mendeteksi kunci Heroku sungguhan. Untuk membuktikannya, sampel uji diperluas
-dengan satu kunci Heroku berlabel `HEROKU_API_KEY`. Hasil pengukuran menunjukkan
-kunci tersebut tetap terdeteksi (True Positive tetap 20, False Negative tetap 0)
-sementara seluruh 40 false positive hilang.
-
-Perbaikan ini juga menjawab risiko *alert fatigue*: pada kondisi awal, dua dari
-setiap tiga temuan kredensial adalah alarm palsu. Perangkat dengan rasio semacam
-itu cenderung diabaikan analis, sehingga temuan sungguhan justru berisiko
-terlewat meskipun recall-nya sempurna.
-
-### 8.5 Perbaikan: Model Skoring Severity + Breadth
-
-Model skoring awal bersifat akumulatif tanpa batas dan mengandung tiga cacat:
-
-1. **Duplikat menggelembungkan skor.** Skor ditambah untuk setiap kecocokan,
-   padahal daftar temuan menyimpan nilai unik. Satu token yang berulang 50 kali
-   menaikkan skor 50 kali lipat, meski hanya tercatat sebagai satu temuan.
-2. **Tidak ada batas atas.** Skor menumpuk tanpa plafon, sehingga APK berukuran
-   besar hampir selalu mencapai `CRITICAL` semata karena volumenya.
-3. **Volume mengalahkan tingkat bahaya.** Empat blok sertifikat (bobot 50) yang
-   berjumlah 200 tergolong `CRITICAL`, sedangkan satu kunci AWS sungguhan (bobot
-   100) hanya `HIGH` — terbalik dari risiko sebenarnya.
-
-Model diganti menjadi dua komponen:
-
-| Komponen | Makna | Perhitungan |
-|---|---|---|
-| *severity* | seberapa berbahaya temuan terparah | bobot tertinggi di antara temuan unik (0–100) |
-| *breadth* | seberapa beragam temuannya | `min(jumlah_temuan_unik − 1, 5) × 4`, maksimum +20 |
-
-Skor akhir adalah `severity + breadth`, terikat pada rentang 0–120. Karena skor
-dihitung dari **temuan unik**, duplikat tidak lagi berpengaruh. Karena bonus
-keragaman dibatasi, volume tidak dapat mendominasi. Karena dasarnya adalah
-temuan terparah, satu kunci berbahaya langsung menaikkan tingkat risiko.
-
-Perilaku ini diverifikasi oleh `tests/test_scoring.py`:
-
-| Skenario | Model lama | Model baru |
-|---|---|---|
-| 1 kunci AWS | 100 → `HIGH` | 100 → `CRITICAL` |
-| 4 blok sertifikat | 200 → `CRITICAL` | 50 → `MEDIUM` |
-| 50 token identik | 4250 → `CRITICAL` | 100 → dihitung sekali |
-
-Sebagai konsekuensi, skala skor berubah total. Angka skor sebelum dan sesudah
-perbaikan ini **tidak dapat dibandingkan langsung**; hanya precision dan recall
-yang tetap sebanding lintas versi.
-
-### 8.6 Perbaikan: Kesadaran Hermes Bytecode
-
-Ditemukan lewat validasi terhadap APK produksi nyata. Aplikasi React Native
-modern tidak mengemas kode sebagai JavaScript teks, melainkan sebagai **Hermes
-bytecode** — berkas biner tempat seluruh string disimpan berjejalan pada satu
-blok penyimpanan tanpa pemisah antar-string:
-
-```
-...https://api.contoh.id/apimobile/auth/verify-otp/__setInternalHeightchevron...
-   └──────────── string 1 ────────────┘└─ string 2 ─┘└──── string 3 ─────┘
+```bash
+python3 apk_analyzer.py MyErpskrip.apk
 ```
 
-Pemindaian byte mentah tidak mengetahui batas antar-string, sehingga regex URL
-menangkap sebuah endpoint beserta ekor string berikutnya
-(`.../verify-otp/__setInternalHeight`). Endpoint asli ada, tetapi ternoda dan
-tidak dapat dipakai.
+Berkas APK berukuran 52,6 MB dibuka sebagai arsip ZIP dan diekstrak (± 60 MB).
+Dari seluruh isinya, **enam artefak** diidentifikasi sebagai pemuat kode atau
+konfigurasi, lalu dipindai satu per satu:
 
-Hermes menyimpan sebuah **tabel string** berisi pasangan (offset, panjang) untuk
-tiap string. Fungsi `extract_hermes_strings()` membaca header Hermes, menghitung
-letak tabel string dan blok penyimpanan, lalu memotong tiap string tepat pada
-batas aslinya. Bila artefak adalah bundle Hermes, korpus pemindaian diganti
-dengan string-string bersih ini (dipisah baris baru agar regex tidak menyeberang
-batas); bila bukan Hermes atau gagal diurai, pemindaian kembali ke byte mentah.
+| Artefak | Ukuran | Keterangan |
+|---|---|---|
+| `assets/index.android.bundle` | 10,86 MB | Bundel Hermes bytecode versi 96 |
+| `classes.dex` | 9,27 MB | Kode Java/Kotlin |
+| `classes3.dex` | 8,35 MB | Kode Java/Kotlin |
+| `classes4.dex` | 7,60 MB | Kode Java/Kotlin |
+| `classes2.dex` | 32,8 KB | Kode Java/Kotlin |
+| `AndroidManifest.xml` | 26,0 KB | Binary XML (AXML) |
 
-Struktur berkas yang diurai (versi bytecode 96):
+Bundel Hermes dikenali dari *magic byte* pada headernya, sehingga pemindaian
+atas artefak tersebut dijalankan terhadap untai teks yang telah dipotong pada
+batas aslinya, bukan terhadap byte mentah.
 
-| Bagian | Isi |
+### 8.3 Hasil Analisis
+
+| Kategori | Jumlah |
 |---|---|
-| Header (128 byte) | magic `0x1F1903C103BC1FC6`, versi, dan cacah tiap tabel |
-| Tabel string kecil | `stringCount` entri; tiap entri 32-bit mengemas offset (23 bit) + panjang (8 bit) |
-| Tabel string overflow | untuk string yang panjangnya melebihi 255 byte |
-| Blok penyimpanan | seluruh byte string, berjejalan |
+| URL ter-inventaris | 84 |
+| Endpoint aplikasi (`app_endpoints`) | 18 |
+| Kanal WebSocket | 1 |
+| Jalur API berdiri sendiri | 1 |
+| Variabel lingkungan | 14 |
+| Kata kunci sensitif | 24 pada bundel, 16–19 pada tiap berkas dex |
+| **Kredensial keras (`api_keys_and_tokens`)** | **0** |
+| **Connection string basis data** | **0** |
+| **Rahasia hasil dekode Base64** | **0** |
+| **Kunci penyimpanan lokal** | **0** |
+| Tingkat risiko seluruh artefak | `LOW` |
 
-Hasil pada bundle `index.android.bundle` APK nyata:
+Sebaran temuan antar-artefak menunjukkan bahwa hampir seluruh informasi berguna
+berada pada satu berkas: bundel Hermes menyumbang 84 URL, 18 endpoint aplikasi,
+dan 24 kata kunci sensitif, sedangkan keempat berkas dex hanya menyumbang
+alamat pustaka dan sedikit kata kunci. Temuan ini sejalan dengan sifat aplikasi
+React Native, yaitu seluruh logika aplikasi berada di sisi JavaScript.
 
-| | Sebelum | Sesudah |
-|---|---|---|
-| Endpoint `.../auth/verify-otp` | ternoda ekor string | terpotong bersih |
-| URL bersih ter-inventaris | 60 (banyak ternoda/blob sampah) | 84 (bersih) |
-| Permukaan API backend terlihat | terkubur | 20 endpoint utuh (auth OTP, penagihan, dll.) |
+### 8.4 Pembacaan Hasil
 
-Diverifikasi `tests/test_hermes.py`, yang membangun berkas Hermes minimal berisi
-string diketahui dan memastikan URL terekstrak tanpa tercampur string tetangga.
-Sebagai imbas, blok `api_paths` (C) juga diperluas agar menerima path standalone
-(berbatas awal/akhir baris), bukan hanya literal berkutip pada JS biasa.
+**Tidak ditemukan kredensial keras yang tertanam pada MyErpskrip.** Tidak ada
+kunci API, token, connection string, maupun rahasia terenkode Base64 pada
+keenam artefak. Karena skor risiko menilai kebocoran kredensial, seluruh artefak
+berlevel `LOW`, dan level itu mencerminkan keadaan yang sebenarnya.
+
+Meski demikian, level `LOW` tidak berarti aplikasi tanpa catatan. Hasil
+pemindaian memperlihatkan bahwa **permukaan antarmuka peladen aplikasi terbaca
+sepenuhnya dari berkas yang didistribusikan**, tanpa perlu mendekompilasi
+maupun menjalankan aplikasi: 18 alamat endpoint terpisah dari URL pustaka,
+mencakup alur autentikasi berbasis OTP, penagihan dan pembayaran, notifikasi,
+data teknis pelanggan, serta tiket gangguan — ditambah satu kanal WebSocket.
+
+Hal itu bukan cacat aplikasi, sebab alamat endpoint memang harus tertulis di
+dalam aplikasi agar dapat dihubungi. Namun keterbacaannya menegaskan bahwa
+pengamanan tidak dapat bertumpu pada anggapan "alamatnya tidak diketahui
+orang": setiap endpoint yang terbaca wajib memiliki pengamanan sendiri di sisi
+peladen, terutama pada jalur autentikasi dan pembayaran.
+
+Keluaran pemindaian diperiksa kembali terhadap artefaknya untuk memastikan tiap
+alamat terekstrak utuh dan tiap kategori terisi dengan nilai yang bermakna.
 
 ---
 
 ## 9. Keterbatasan yang Diketahui
 
-Bagian ini didasarkan pada pembacaan kode dan hasil pengujian, dan menjadi dasar
-perbaikan pada tahap selanjutnya.
+Bagian ini mencatat batas kemampuan perangkat secara terbuka, sekaligus menjadi
+dasar arah pengembangan selanjutnya.
 
-**9.1 ~~Pola `Heroku API Key` terlalu longgar.~~ — SUDAH DIPERBAIKI.**
-Pola lama, `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-...`, sesungguhnya hanyalah pola UUID
-generik, sehingga setiap UUID di dalam APK dianggap kredensial. Ini merupakan
-penyebab tunggal seluruh false positive pada pengukuran awal. Telah diperbaiki
-melalui deteksi berbasis konteks; lihat bagian 8.4.
+**9.1 AndroidManifest.xml belum diurai secara utuh.**
+Manifest pada APK yang telah dipaketkan disimpan dalam format binary XML (AXML),
+bukan XML teks. Pola perangkat mensyaratkan literal berada di antara tanda
+kutip, sehingga permission dan komponen hanya terbaca sebagian melalui
+pemindaian untai teks. Diperlukan pengurai AXML untuk menutup celah ini.
 
-**9.2 ~~Skor risiko tidak dinormalisasi.~~ — SUDAH DIPERBAIKI.**
-Model skoring lama bertambah per kemunculan tanpa batas atas, sehingga duplikat
-menggelembungkan skor dan APK besar hampir selalu `CRITICAL` karena volumenya.
-Telah diganti dengan model *severity + breadth* yang terikat 0–120 dan berbasis
-temuan unik; lihat bagian 8.5.
+**9.2 Skor belum menilai eksposur permukaan endpoint.**
+Skor risiko hanya menilai kebocoran kredensial. Aplikasi yang seluruh permukaan
+antarmukanya terbaca, namun tidak memuat kredensial keras, tetap berlevel `LOW`.
+Eksposur semacam itu dilaporkan pada kategori `app_endpoints` dan perlu dibaca
+tersendiri oleh analis. Menjadikannya bagian dari skor adalah pengembangan yang
+paling layak didahulukan.
 
-**9.3 Ketahanan terhadap Zip Slip — hipotesis yang diuji dan terbantah.**
-Zip Slip adalah kerentanan ketika entri arsip bernama `../../berkas` diekstrak
-tanpa pemeriksaan sehingga berkas tertulis di luar direktori tujuan. Karena
-`extract_apk()` memakai `zipfile.extractall()`, sempat diduga perangkat ini
-rentan. Dugaan tersebut diuji dengan APK jahat buatan sendiri
-(`tests/test_zip_slip.py`), dan hasilnya **membantah dugaan**: pustaka standar
-Python 3 sudah menetralkan Zip Slip pada dua vektor sekaligus —
-
-- entri `../../berkas` disanitasi menjadi `dest/berkas` (komponen `..` dibuang);
-- entri symlink yang menunjuk keluar ditulis sebagai berkas teks biasa, bukan
-  sebagai tautan, sehingga tidak dapat ditembus.
-
-Meski demikian, keamanan itu bergantung pada perilaku internal `extractall()`.
-Bila kelak metode ekstraksi diubah menjadi perulangan manual (misalnya untuk
-melewati berkas berukuran sangat besar satu per satu), perlindungan implisit itu
-dapat hilang tanpa disadari. Karena itu `extract_apk()` dilengkapi pemeriksaan
-jalur eksplisit sebagai *defense-in-depth* — bukan menambal kerentanan yang ada,
-melainkan menjadikan jaminan keamanan tersurat dan tahan terhadap perubahan kode.
-Uji `test_zip_slip.py` dipertahankan sebagai *regression test* yang menjaga agar
-jaminan itu tidak diam-diam hilang di kemudian hari.
-
-**9.4 AndroidManifest.xml tidak diurai secara benar.**
-Pada APK sungguhan, manifest disimpan dalam format binary XML (AXML) tanpa tanda
-kutip. Pola analyzer mensyaratkan literal berada di antara tanda kutip, sehingga
-permission dan komponen pada APK nyata banyak yang tidak terbaca. Diperlukan
-pengurai AXML untuk menutup celah ini.
-
-**9.5 Pemakaian memori.**
+**9.3 Pemakaian memori.**
 Artefak dimuat seluruhnya ke memori melalui `read_bytes()`, lalu sekitar 25 pola
 disapukan berulang kali ke buffer yang sama. Untuk berkas berukuran ratusan
-megabyte, pendekatan ini boros memori sekaligus lambat.
+megabyte, pendekatan ini boros memori sekaligus lambat. Pembatas 300 MB per
+artefak dipasang sebagai pengaman sementara.
 
-**9.6 Kinerja blok Base64.**
+**9.4 Kinerja blok Base64.**
 Pencarian kandidat Base64 menyapu seluruh berkas dan merupakan blok paling
 lambat. Pembatas 50 hanya menghitung hasil dekode yang berhasil, sehingga pada
 kasus terburuk seluruh kandidat tetap diproses.
 
-**9.7 Batas metode analisis statis.**
-Endpoint yang dirakit saat program berjalan — misalnya `base + "/" + versi +
-"/user"` — tidak akan pernah terlihat, sebab bentuk utuhnya baru terbentuk ketika
-aplikasi dijalankan. Keterbatasan ini melekat pada metode analisis statis dan
-tidak dapat dihilangkan tanpa menambahkan analisis dinamis.
+**9.5 Batas metode analisis statis.**
+Alamat yang dirakit saat program berjalan — misalnya `base + "/" + versi +
+"/user"` — tidak akan pernah terlihat, sebab bentuk utuhnya baru terbentuk
+ketika aplikasi dijalankan. Keterbatasan ini melekat pada metode analisis statis
+dan tidak dapat dihilangkan tanpa menambahkan analisis dinamis.
+
+**9.6 Ketergantungan pada versi bytecode Hermes.**
+Pengurai untai teks Hermes ditulis mengikuti tata letak header versi bytecode
+96. Versi Hermes yang lebih baru dapat mengubah tata letak tersebut. Bila header
+gagal diurai, perangkat tidak berhenti melainkan kembali memindai byte mentah,
+sehingga hasilnya tetap keluar meski tidak sebersih semestinya.
 
 ---
 
-## 10. Glosarium
+## 10. Catatan Keamanan Perangkat
+
+Perangkat ini membuka arsip yang tidak dipercaya, sehingga ekstraksinya sendiri
+perlu diamankan. **Zip Slip** adalah kerentanan ketika entri arsip bernama
+`../../berkas` diekstrak tanpa pemeriksaan sehingga berkas tertulis di luar
+direktori tujuan.
+
+`extract_apk()` karena itu memeriksa jalur setiap entri secara eksplisit dan
+menolak arsip yang memuat entri di luar direktori tujuan, alih-alih bergantung
+pada perilaku internal pustaka standar. Arsip semacam itu **ditolak tegas**,
+bukan diam-diam disanitasi, sehingga jaminan keamanannya tersurat dan tidak
+ikut hilang bila metode ekstraksi kelak diubah.
+
+---
+
+## 11. Glosarium
 
 | Istilah | Penjelasan |
 |---|---|
 | **Analisis statis** | Pemeriksaan aplikasi tanpa menjalankannya |
 | **Artefak** | Berkas di dalam APK yang memuat kode atau konfigurasi |
 | **Entropi Shannon** | Ukuran keacakan data; makin acak, makin tinggi nilainya |
-| **False positive** | Temuan yang dilaporkan padahal sebenarnya bukan ancaman |
-| **False negative** | Ancaman nyata yang justru terlewat |
-| **Precision** | Proporsi temuan yang benar-benar sahih |
-| **Recall** | Proporsi ancaman nyata yang berhasil ditemukan |
-| **Ground truth** | Kondisi sebenarnya yang telah diketahui, dipakai sebagai acuan uji |
+| **Hermes bytecode** | Format biner hasil kompilasi JavaScript pada React Native |
+| **Minify** | Pemendekan nama identifier agar berkas kode lebih kecil |
+| **Magic byte** | Byte penanda di awal berkas yang menyatakan jenis formatnya |
 | **Zip Slip** | Kerentanan penulisan berkas di luar direktori tujuan saat ekstraksi arsip |
 | **AXML** | Format binary XML milik Android untuk menyimpan manifest |

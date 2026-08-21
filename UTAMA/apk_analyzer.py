@@ -5,11 +5,11 @@ import json
 import math
 import re
 import struct
-import traceback
+import sys
 import zipfile
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 HERMES_MAGIC = 0x1F1903C103BC1FC6
 HERMES_HEADER_SIZE = 128
@@ -39,7 +39,12 @@ LIBRARY_HOSTS = (
     "npmjs.com", "yarnpkg.com", "unpkg.com", "jsdelivr.net", "fb.me", "fb.com",
     "facebook.com", "mozilla.org", "apache.org", "eclipse.org", "json.org",
     "unicode.org", "crbug.com", "dev.to", "medium.com", "stackoverflow.com",
+    "xmlpull.org", "xml.org", "adobe.com",
+    "googleapis.com", "gstatic.com", "google.com", "googleusercontent.com",
+    "crashlytics.com", "doubleclick.net", "android.com",
 )
+
+TEMPLATE_HOST_RE = re.compile(r"%[sd@]|\{|\$")
 
 APP_ENDPOINT_PATH = re.compile(
     r"/(?:api|apimobile|v[0-9]+|graphql|oauth|rest|auth|mobile)(?:/|$)", re.IGNORECASE
@@ -80,6 +85,11 @@ RESULT_CATEGORIES = (
     "android_components", "decoded_secrets", "keywords_found",
 )
 
+SUMMARY_FIELDS = (
+    "total_urls", "total_app_endpoints", "total_api_paths", "total_tokens_found",
+    "total_db_connections", "total_decoded_secrets", "total_keywords",
+)
+
 SENSITIVE_INDICATORS = (
     "http", "api", "key", "token", "secret", "pass", "auth", "admin",
     "login", "bearer", "jdbc", "mongodb",
@@ -105,7 +115,6 @@ def calculate_shannon_entropy(data: bytes) -> float:
 
 
 def extract_apk(apk_path: Path, output_dir: Path) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
     output_root = output_dir.resolve()
     with zipfile.ZipFile(apk_path, "r") as apk:
         for member in apk.namelist():
@@ -114,18 +123,23 @@ def extract_apk(apk_path: Path, output_dir: Path) -> None:
                 raise ValueError(
                     f"Entri APK menulis di luar direktori tujuan (Zip Slip): {member!r}"
                 )
+        output_dir.mkdir(parents=True, exist_ok=True)
         apk.extractall(output_dir)
 
 
 def extract_hermes_strings(raw: bytes) -> Optional[List[str]]:
     if len(raw) < HERMES_HEADER_SIZE or struct.unpack_from("<Q", raw, 0)[0] != HERMES_MAGIC:
         return None
+    def u32(offset: int) -> int:
+        return struct.unpack_from("<I", raw, offset)[0]
+
+    def align4(value: int) -> int:
+        return (value + 3) & ~3
+
     try:
-        u32 = lambda o: struct.unpack_from("<I", raw, o)[0]
         function_count, string_kind_count, identifier_count = u32(40), u32(44), u32(48)
         string_count, overflow_count, storage_size = u32(52), u32(56), u32(60)
 
-        align4 = lambda x: (x + 3) & ~3
         off = align4(HERMES_HEADER_SIZE + function_count * 16)
         off = align4(off + string_kind_count * 4)
         off = align4(off + identifier_count * 4)
@@ -179,6 +193,8 @@ def classify_app_endpoint(url: str) -> bool:
     if not host_match:
         return False
     host = host_match.group(1).lower()
+    if TEMPLATE_HOST_RE.search(host):
+        return False
     if any(lib in host for lib in LIBRARY_HOSTS):
         return False
     return bool(APP_ENDPOINT_PATH.search(url[host_match.end():]))
@@ -187,7 +203,14 @@ def classify_app_endpoint(url: str) -> bool:
 def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     file_size = artifact_path.stat().st_size
     if file_size > MAX_FILE_SIZE:
-        return {"file": artifact_path.name, "error": "File >300MB, dilewati."}
+        return {
+            "file": artifact_path.name,
+            "size_kb": round(file_size / 1024, 2),
+            "error": "File >300MB, dilewati.",
+            "risk_level": "SKIPPED",
+            "risk_score": 0,
+            "summary": {key: 0 for key in SUMMARY_FIELDS},
+        }
 
     raw_bytes = artifact_path.read_bytes()
 
@@ -199,13 +222,13 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     results: Dict[str, set] = {category: set() for category in RESULT_CATEGORIES}
     finding_weights: Dict[str, int] = {}
 
-    for url in re.findall(rb"https?://[^\s\"'`\\<>\(\)\{\}\[\]]+", raw_bytes):
+    for url in re.findall(rb"https?://[^\s\x00-\x20\x7f\"'`\\<>\(\)\{\}\[\]]+", raw_bytes):
         cleaned = url.decode("utf-8", errors="ignore").rstrip(".,);:]")
         if len(cleaned) > 10:
             results["urls"].add(cleaned)
             if classify_app_endpoint(cleaned):
                 results["app_endpoints"].add(cleaned)
-    for ws in re.findall(rb"wss?://[^\s\"'`\\<>\(\)\{\}\[\]]+", raw_bytes):
+    for ws in re.findall(rb"wss?://[^\s\x00-\x20\x7f\"'`\\<>\(\)\{\}\[\]]+", raw_bytes):
         results["websockets"].add(ws.decode("utf-8", errors="ignore").rstrip(".,);:]"))
 
     for ip in re.findall(
@@ -244,8 +267,6 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
 
     for name, (pattern, weight) in TOKEN_PATTERNS.items():
         for match in re.findall(pattern, raw_bytes):
-            if isinstance(match, tuple):
-                match = match[0]
             if name == "Generic API Key" and calculate_shannon_entropy(match) < 3.8:
                 continue
             finding_key = f"[{name}] {match.decode('utf-8', errors='ignore')}"
@@ -338,6 +359,48 @@ def analyze_artifact(artifact_path: Path) -> Dict[str, Any]:
     }
 
 
+def analyze_apk(
+    apk_path: Path,
+    on_start: Optional[Callable[[str, float], None]] = None,
+    on_result: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+) -> Optional[Tuple[Dict[str, Any], Path]]:
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(f"{apk_path.stem}_analysis_{timestamp}")
+    extract_dir = output_dir / "extracted_files"
+
+    extract_apk(apk_path, extract_dir)
+    artifacts = find_artifacts(extract_dir)
+    if not artifacts:
+        return None
+
+    report: Dict[str, Any] = {
+        "metadata": {
+            "target_apk": apk_path.name,
+            "analysis_timestamp": timestamp,
+            "total_artifacts_found": len(artifacts),
+        },
+        "artifacts": {},
+    }
+    for artifact in artifacts:
+        relative_path = str(artifact.relative_to(extract_dir))
+        if on_start:
+            on_start(relative_path, artifact.stat().st_size / 1024)
+        result = analyze_artifact(artifact)
+        report["artifacts"][relative_path] = result
+        if on_result:
+            on_result(relative_path, result)
+
+    report["artifacts"] = dict(
+        sorted(report["artifacts"].items(), key=lambda x: x[1].get("risk_score", 0), reverse=True)
+    )
+
+    output_json = output_dir / "reverse_results.json"
+    output_json.write_text(
+        json.dumps(report, indent=4, ensure_ascii=False), encoding="utf-8"
+    )
+    return report, output_json
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Multi-framework APK static analyzer")
     parser.add_argument("apk_path", type=Path, help="Path ke file .apk target")
@@ -346,55 +409,37 @@ def main() -> None:
     apk_path = args.apk_path.resolve()
     if not apk_path.is_file():
         print(f"[!] Error: File '{apk_path}' tidak ditemukan.")
-        return
-
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(f"{apk_path.stem}_analysis_{timestamp}")
-    extract_dir = output_dir / "extracted_files"
+        sys.exit(1)
 
     print(f"[*] Target: {apk_path.name}")
-    print(f"[*] Output: {output_dir.resolve()}")
+    print("[*] Mengekstrak APK lalu memindai artefak (RN / Kotlin / Flutter)...")
 
-    try:
-        print("[*] Mengekstrak APK...")
-        extract_apk(apk_path, extract_dir)
+    def on_start(relative_path: str, size_kb: float) -> None:
+        print(f"[*] Menganalisis: {relative_path} ({size_kb:.1f} KB)")
 
-        print("[*] Memindai artefak (RN / Kotlin / Flutter)...")
-        artifacts = find_artifacts(extract_dir)
-        if not artifacts:
-            print("[!] Tidak ditemukan artefak untuk dianalisis.")
+    def on_result(relative_path: str, result: Dict[str, Any]) -> None:
+        if "error" in result:
+            print(f"    -> Dilewati: {result['error']}")
             return
-        print(f"[*] Ditemukan {len(artifacts)} artefak.\n")
-
-        final_result = {
-            "metadata": {
-                "target_apk": apk_path.name,
-                "analysis_timestamp": timestamp,
-                "total_artifacts_found": len(artifacts),
-            },
-            "artifacts": {},
-        }
-        for artifact in artifacts:
-            relative_path = str(artifact.relative_to(extract_dir))
-            print(f"[*] Menganalisis: {relative_path} ({artifact.stat().st_size / 1024:.1f} KB)")
-            result = analyze_artifact(artifact)
-            final_result["artifacts"][relative_path] = result
-            print(f"    -> Risiko: {result['risk_level']} | Token: {result['summary']['total_tokens_found']} | Endpoint: {result['summary']['total_app_endpoints']}")
-
-        final_result["artifacts"] = dict(
-            sorted(final_result["artifacts"].items(), key=lambda x: x[1].get("risk_score", 0), reverse=True)
+        summary = result["summary"]
+        print(
+            f"    -> Risiko: {result['risk_level']}"
+            f" | Token: {summary['total_tokens_found']}"
+            f" | Endpoint: {summary['total_app_endpoints']}"
         )
 
-        output_json = output_dir / "reverse_results.json"
-        with open(output_json, "w", encoding="utf-8") as f:
-            json.dump(final_result, f, indent=4, ensure_ascii=False)
-
-        print(f"\n[+] Analisis selesai.")
+    try:
+        outcome = analyze_apk(apk_path, on_start=on_start, on_result=on_result)
+        if outcome is None:
+            print("[!] Tidak ditemukan artefak untuk dianalisis.")
+            sys.exit(1)
+        _, output_json = outcome
+        print("\n[+] Analisis selesai.")
         print(f"[+] Hasil tersimpan di: {output_json.resolve()}")
 
-    except Exception as e:
-        print(f"[!] Fatal Error: {e}")
-        traceback.print_exc()
+    except (zipfile.BadZipFile, ValueError, OSError) as e:
+        print(f"[!] Gagal: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
