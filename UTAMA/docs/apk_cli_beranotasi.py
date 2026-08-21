@@ -17,12 +17,12 @@ Bandingkan  : python3 apk_analyzer.py <target.apk>   (mode langsung sekali jalan
      keluaran dialihkan ke berkas, warna dimatikan agar tidak mengotori teks.
 
 Struktur: apk_cli hanya LAPISAN TAMPILAN. Seluruh analisis tetap dikerjakan
-fungsi publik apk_analyzer (extract_apk, find_artifacts, analyze_artifact),
-sehingga logika inti tidak diduplikasi.
+fungsi publik apk_analyzer — terutama analyze_apk(), satu pipeline yang sama
+yang juga dipakai mode baris perintah, sehingga alur analisis tidak ditulis
+dua kali.
 ============================================================================
 """
 
-import datetime
 import glob
 import json
 import os
@@ -136,13 +136,22 @@ def render_summary(final_result: dict, output_json: Path) -> None:
         print(f"  {short:<34}{badge(data['risk_level'])}"
               f"{s.get('total_app_endpoints', 0):>9}{s['total_tokens_found']:>7}")
 
-    top = next((d for d in artifacts.values() if "error" not in d), None)
-    if top and top.get("app_endpoints"):
+    # Endpoint ditampilkan dari artefak yang memuatnya PALING BANYAK — bukan
+    # artefak pertama. Bila seluruh artefak berskor sama (misalnya semuanya
+    # LOW), urutan daftar tidak lagi menandakan artefak mana yang paling
+    # informatif, sehingga memilih yang pertama bisa menampilkan artefak kosong.
+    with_endpoints = [
+        (name, data) for name, data in artifacts.items() if data.get("app_endpoints")
+    ]
+    if with_endpoints:
+        name, data = max(with_endpoints, key=lambda item: len(item[1]["app_endpoints"]))
+        endpoints = data["app_endpoints"]
         print()
-        rule("ENDPOINT APLIKASI (teratas)")
-        for ep in top["app_endpoints"][:8]:
+        rule("ENDPOINT APLIKASI")
+        print(f"  {DIM}dari {name}{RESET}")
+        for ep in endpoints[:8]:
             print(f"  {TEAL}·{RESET} {ep}")
-        extra = len(top["app_endpoints"]) - 8
+        extra = len(endpoints) - 8
         if extra > 0:
             print(f"  {DIM}  … dan {extra} lainnya (lihat berkas JSON){RESET}")
 
@@ -154,7 +163,6 @@ def find_apk_candidates() -> list:
     dirs = [
         Path.cwd(),
         BASE_DIR,
-        BASE_DIR / "tests",
         BASE_DIR.parent / "PENDUKUNG" / "apk_input",
         Path.cwd() / "apk",
     ]
@@ -197,37 +205,20 @@ def action_analyze() -> None:
         pause()
         return
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(f"{apk_path.stem}_analysis_{timestamp}")
-    extract_dir = output_dir / "extracted_files"
     print(f"\n  {DIM}mengekstrak & memindai…{RESET}")
     try:
-        apk_analyzer.extract_apk(apk_path, extract_dir)
-        artifacts = apk_analyzer.find_artifacts(extract_dir)
-        if not artifacts:
+        # Seluruh pekerjaan analisis — ekstraksi, pemilihan artefak, pemindaian,
+        # pengurutan, penulisan JSON — dikerjakan analyze_apk(). Di sini hanya
+        # ditambahkan callback agar nama artefak muncul di layar saat dipindai.
+        outcome = apk_analyzer.analyze_apk(
+            apk_path,
+            on_start=lambda rel, size_kb: print(f"  {DIM}· {rel} ({size_kb:.1f} KB){RESET}"),
+        )
+        if outcome is None:
             print(f"  {YELLOW}Tidak ada artefak untuk dianalisis.{RESET}")
             pause()
             return
-        final_result = {
-            "metadata": {
-                "target_apk": apk_path.name,
-                "analysis_timestamp": timestamp,
-                "total_artifacts_found": len(artifacts),
-            },
-            "artifacts": {},
-        }
-        for artifact in artifacts:
-            rel = str(artifact.relative_to(extract_dir))
-            final_result["artifacts"][rel] = apk_analyzer.analyze_artifact(artifact)
-        # Urutkan menurun berdasar skor risiko.
-        final_result["artifacts"] = dict(
-            sorted(final_result["artifacts"].items(),
-                   key=lambda x: x[1].get("risk_score", 0), reverse=True)
-        )
-        output_json = output_dir / "reverse_results.json"
-        output_json.write_text(
-            json.dumps(final_result, indent=4, ensure_ascii=False), encoding="utf-8"
-        )
+        final_result, output_json = outcome
         render_summary(final_result, output_json)
     except Exception as exc:
         print(f"  {RED}Gagal:{RESET} {exc}")
@@ -256,7 +247,7 @@ def action_history() -> None:
 def action_tests() -> None:
     # Menu 3: jalankan tiap berkas uji sebagai subprocess, tampilkan lulus/gagal.
     rule("PENGUJIAN")
-    tests = ["evaluate", "test_zip_slip", "test_scoring", "test_hermes"]
+    tests = ["test_zip_slip", "test_scoring", "test_hermes"]
     for name in tests:
         script = BASE_DIR / "tests" / f"{name}.py"
         if not script.is_file():

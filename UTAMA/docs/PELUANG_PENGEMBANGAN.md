@@ -89,8 +89,9 @@ karena hasilnya kasat mata saat demo. Bila ingin yang paling "menyelesaikan
 cerita laporan": **skoring eksposur endpoint (#1)**.
 
 Bila ingin **berhenti**: kondisi sekarang sudah lebih dari cukup untuk KP.
-Delapan perbaikan terbukti + parser Hermes + metodologi terukur sudah menjadi
-inti laporan yang kuat.
+Mesin pemindai 13 blok deteksi, pengurai untai teks Hermes, model skoring
+severity + breadth, pemisahan endpoint aplikasi, dan penerapannya terhadap
+MyErpskrip sudah menjadi inti laporan yang kuat.
 
 > Catatan kejujuran untuk sidang: keterbatasan yang tersisa BUKAN kelemahan
 > laporan. Menuliskannya sebagai "peluang pengembangan" justru menunjukkan kamu
