@@ -287,6 +287,19 @@ pakai yang sudah sesuai framing laporan. Berkas itu catatan kerja, bukan bagian
 laporan. Keempat salinan knowledge di atas sudah disegarkan pada tanggal yang
 sama.
 
+`reverse_results.json` hasil penerapan 22 Agustus 2026 disalin ke
+`~/Downloads/files/` sebagai knowledge Project. Naskah instruksi Project memuat
+bagian "Penyensoran `reverse_results.json`": angka agregat, struktur keluaran,
+dan jenis endpoint boleh dipakai, sedangkan host, jalur endpoint, dan isi array
+alamat wajib disamarkan menjadi `api.contoh.id` bila harus tampil sebagai
+contoh. Instruksi juga menyuruh memeriksa versi berkas (6 artefak, 136 URL,
+18 `app_endpoints`) agar berkas lama tidak terpakai diam-diam.
+
+Hasil pemindaian 13 Agustus 2026 dipindahkan dari `UTAMA/` ke
+`PENDUKUNG/hasil_apk_nyata/` — isinya memuat host dan endpoint pihak ketiga,
+sehingga tidak boleh berada di direktori yang dikumpulkan. `UTAMA/` kini hanya
+berisi kode, `docs/`, dan `tests/`.
+
 Laporan KP dikompilasi sebagai halaman web (Artifact privat), terstruktur bab
 I–VI dengan kedalaman naratif+teknis, nol data endpoint nyata:
 https://claude.ai/code/artifact/d9e8f932-3b73-4152-ad30-f80def3145ef
